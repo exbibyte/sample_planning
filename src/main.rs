@@ -1,5 +1,3 @@
-///model viewer
-
 #[macro_use] extern crate log;
 
 extern crate image;
@@ -60,6 +58,19 @@ use self::e2rcore::implement::file::md5common;
 use self::e2rcore::implement::file::wavefrontobj;
 use self::e2rcore::implement::file::wavefrontcomp;
 
+mod planner_param;
+mod planner;
+mod planner_basic;
+mod stats;
+mod states;
+
+use states::States;
+use planner_param::Param;
+use planner::Planner;
+use planner_basic::{PlannerBasic};
+use stats::Stats;
+
+
 //todo: put this somewhere else
 pub fn file_open( file_path: & str ) -> Option<String> {
     let path = File::open( file_path ).expect("file path open invalid");
@@ -76,8 +87,9 @@ pub fn file_open( file_path: & str ) -> Option<String> {
 pub struct GameState {
     _exit: bool,
     _continue_compute: bool,
-    _time_game: f32,
+    _time_game: u64,
     _is_init_run_first_time: bool,
+    _iterations: u64,
 }
 
 impl Default for GameState {
@@ -86,8 +98,9 @@ impl Default for GameState {
         GameState {
             _exit: false,
             _continue_compute: false,
-            _time_game: 0.0,
+            _time_game: 0,
             _is_init_run_first_time: false,
+            _iterations: 0,
         }
     }
 }
@@ -185,13 +198,13 @@ pub enum RenderObj {
         _path_shader_fs: String,
     },
     TestGeometry {
-        _time_game: f32,
+        _time_game: u64,
         _light: light::LightAdsPoint,
         _camera: camera::Cam,
         _md5_precompute: Rc< Vec<i_md5::compute::ComputeCollection> >,
     },
     Points {
-        _time_game: f32,
+        _time_game: u64,
         _light: light::LightAdsPoint,
         _camera: camera::Cam,
         _coords: Vec<[f32;3]>,
@@ -231,7 +244,7 @@ impl From< RenderObj > for Vec< renderer_gl::Event > {
 
                 let mut rng = rand::thread_rng();
                 for i in _coords.iter(){
-                    let primitive = primitive::Poly6{ _pos: mat::Mat3x1 { _val: [ i[0], i[1], i[2] ] }, _scale: mat::Mat3x1{ _val: [ 1., 1., 1.] }, _radius: 0.07 };
+                    let primitive = primitive::Poly6{ _pos: mat::Mat3x1 { _val: [ i[0], i[1], i[2] ] }, _scale: mat::Mat3x1{ _val: [ 1., 1., 1.] }, _radius: 0.1 };
                     render_events.push( renderer_gl::Event::AddObj( i_ele::Ele::init( primitive ) ) );
                 }
 
@@ -255,7 +268,7 @@ pub struct GameLogic {
     _path_shader_fs: String,
     _state: GameState,
     _uicam: UiCam,
-    _points: Vec<[f32;3]>,
+    _planner: Box<dyn Planner<i32>>,
 }
 
 impl IGameLogic for GameLogic {
@@ -270,17 +283,6 @@ impl IGameLogic for GameLogic {
     type RenderObj = RenderObj;
 
     fn new() -> GameLogic {
-        
-        let points = {
-            let mut rng = rand::thread_rng();
-            
-            (0..200).map( |_x| {
-                let x = rng.gen_range(-10., 10.);
-                let y = rng.gen_range(-10., 10.);
-                let z = rng.gen_range(-10., 10.);
-                [ x, y, z ]
-            } ).collect()
-        };
         
         //camera
         let fov = 114f32;
@@ -314,7 +316,7 @@ impl IGameLogic for GameLogic {
                 _trackball: TrackBall::new(500.,500.),
                 .. Default::default()
             },
-            _points: points,
+            _planner: Box::new( PlannerBasic::init( Param{ states_goal: 5i32 } ) ),
         };
         
         //lights
@@ -379,10 +381,16 @@ impl IGameLogic for GameLogic {
     fn get_computations( & mut self, _changed_game_state: & GameStateChangePending ) -> Vec< ComputeUnit > {
         //todo: transform changed game state to additional computations
 
+        //for now, put the main computation here (eg: run planner iteration) and ignore other hooks
+
+        let abort = self._planner.plan_iteration( self._state._iterations, self._state._time_game );
+        
         let mut _compute_units = vec![];
 
         //append this to signal compute cycle is complete
-        _compute_units.push( ComputeUnit::SignalEndCompute );
+        if abort {
+            _compute_units.push( ComputeUnit::SignalEndCompute );
+        }
 
         _compute_units
     }
@@ -402,7 +410,7 @@ impl IGameLogic for GameLogic {
             //does this once to setup some shaders
             self._state._is_init_run_first_time = true;
             let initial_render = RenderObj::InitialRender { _path_shader_fs: self._path_shader_fs.clone(),
-                                                             _path_shader_vs: self._path_shader_vs.clone() };
+                                                            _path_shader_vs: self._path_shader_vs.clone() };
             v.push( initial_render );
         }
 
@@ -417,8 +425,8 @@ impl IGameLogic for GameLogic {
         let axis_right = axis_front.cross( & self._camera._up ).unwrap().normalize().unwrap();
 
         let move_front = axis_front.scale( self._uicam._move.0 as f32 * 0.3 ).unwrap();
-        let move_right = axis_right.scale( self._uicam._move.1 as f32 * 0.3 + 0.1 ).unwrap();
-        // let move_right = axis_right.scale( self._uicam._move.1 as f32 * 0.3 ).unwrap();
+        // let move_right = axis_right.scale( self._uicam._move.1 as f32 * 0.3 + 0.1 ).unwrap();
+        let move_right = axis_right.scale( self._uicam._move.1 as f32 * 0.3 ).unwrap();
         let move_up = self._camera._up.normalize().unwrap().scale( self._uicam._move.2 as f32 * 0.3 ).unwrap();
         
         pos = pos.plus( & move_front.plus( & move_right ).unwrap().plus( & move_up ).unwrap() ).unwrap();
@@ -441,15 +449,17 @@ impl IGameLogic for GameLogic {
         v.push( RenderObj::Points { _time_game: self._state._time_game,
                                      _light: self._lights[0].clone(),
                                      _camera: self._camera.clone(),
-                                     _coords: self._points.clone(),
-                                     _colour: [255, 0, 0] } );
+                                     _coords: self._planner.get_trajectories().to_vec(),
+                                     _colour: [250, 250, 250] } );
         
-        self._state._time_game += 1.;
-
+        self._state._time_game += 1;
+        
+        self._state._iterations += 1;
+        
         v
     }
     fn filter_renderables( & mut self, _r: Vec< RenderObj > ) -> Vec< RenderObj > {
-        //todo: add spatial accelerator algo here
+        //todo
         _r
     }
 
