@@ -1,0 +1,15 @@
+[package]
+name = "sample_planning"
+version = "0.0.0"
+authors = ["Bill Liu <yuan6liu@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+e2r = "0.10.0"
+mazth = "*"
+chrono = "*"
+nom = "*"
+log = "*"
+image = "*"
+rand = "*"
+pretty_env_logger = "*"
