@@ -63,15 +63,15 @@ mod planner;
 mod planner_basic;
 mod stats;
 mod states;
+mod dynamics;
 
-use states::States;
 use planner_param::Param;
 use planner::Planner;
 use planner_basic::{PlannerBasic};
-use stats::Stats;
+use states::*;
+use dynamics::*;
+// use stats::Stats;
 
-
-//todo: put this somewhere else
 pub fn file_open( file_path: & str ) -> Option<String> {
     let path = File::open( file_path ).expect("file path open invalid");
     let mut buf_reader = BufReader::new(path);
@@ -268,9 +268,9 @@ pub struct GameLogic {
     _path_shader_fs: String,
     _state: GameState,
     _uicam: UiCam,
-    _planner: Box<dyn Planner<i32>>,
+    _planner: Box< Planner<States1D> >,
 }
-
+    
 impl IGameLogic for GameLogic {
 
     type EventInput = InputFiltered;
@@ -316,7 +316,14 @@ impl IGameLogic for GameLogic {
                 _trackball: TrackBall::new(500.,500.),
                 .. Default::default()
             },
-            _planner: Box::new( PlannerBasic::init( Param{ states_goal: 5i32 } ) ),
+            _planner: Box::new( PlannerBasic::init(
+                Param{
+                    states_init: States1D(1f32),
+                    states_goal: States1D(0f32),
+                    dynamics: dynamics::dynamics_1d,
+                    stop_cond: dynamics::stop_cond_1d,
+                }
+            ) ),
         };
         
         //lights
@@ -383,12 +390,16 @@ impl IGameLogic for GameLogic {
 
         //for now, put the main computation here (eg: run planner iteration) and ignore other hooks
 
-        let abort = self._planner.plan_iteration( self._state._iterations, self._state._time_game );
+        let (end_current_loop, end_all) = self._planner.plan_iteration( self._state._iterations, self._state._time_game );
         
         let mut _compute_units = vec![];
-
-        //append this to signal compute cycle is complete
-        if abort {
+        
+        if end_all {
+            self._state._exit = true;
+        }
+        
+        if end_current_loop {
+            //append this to signal compute cycle is complete
             _compute_units.push( ComputeUnit::SignalEndCompute );
         }
 
@@ -479,3 +490,4 @@ fn main() {
     k.run().is_ok();
     
 }
+
