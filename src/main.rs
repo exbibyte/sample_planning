@@ -1,12 +1,12 @@
 #[macro_use] extern crate log;
 
+extern crate zpatial;
 extern crate image;
 extern crate rand;
 extern crate mazth;
 extern crate e2rcore;
 extern crate pretty_env_logger;
 // extern crate chrono;
-
 // use self::chrono::prelude::*;
 
 use std::fs::File;
@@ -64,12 +64,16 @@ mod planner_basic;
 mod stats;
 mod states;
 mod dynamics;
+mod rrt;
+mod obstacle;
+mod control;
 
 use planner_param::Param;
 use planner::Planner;
 use planner_basic::{PlannerBasic};
 use states::*;
 use dynamics::*;
+use control::*;
 // use stats::Stats;
 
 pub fn file_open( file_path: & str ) -> Option<String> {
@@ -244,7 +248,7 @@ impl From< RenderObj > for Vec< renderer_gl::Event > {
 
                 let mut rng = rand::thread_rng();
                 for i in _coords.iter(){
-                    let primitive = primitive::Poly6{ _pos: mat::Mat3x1 { _val: [ i[0], i[1], i[2] ] }, _scale: mat::Mat3x1{ _val: [ 1., 1., 1.] }, _radius: 0.1 };
+                    let primitive = primitive::Poly6{ _pos: mat::Mat3x1 { _val: [ i[0], i[1], i[2] ] }, _scale: mat::Mat3x1{ _val: [ 1., 1., 1.] }, _radius: 0.01 };
                     render_events.push( renderer_gl::Event::AddObj( i_ele::Ele::init( primitive ) ) );
                 }
 
@@ -268,7 +272,7 @@ pub struct GameLogic {
     _path_shader_fs: String,
     _state: GameState,
     _uicam: UiCam,
-    _planner: Box< Planner<States1D> >,
+    _planner: Box< Planner<States3D,Control1D,States3D> >,
 }
     
 impl IGameLogic for GameLogic {
@@ -297,9 +301,9 @@ impl IGameLogic for GameLogic {
                                                 (bbox_upper[1] + bbox_lower[1])/2.,
                                                 (bbox_upper[2] + bbox_lower[2])/2., ] };
         let cam_up = mat::Mat3x1 { _val: [0f32, 0f32, 1f32] };
-        let cam_pos = mat::Mat3x1 { _val: [ bbox_upper[0] + 10.,
-                                            bbox_upper[1] + 10.,
-                                            bbox_upper[2] + 10.] };
+        let cam_pos = mat::Mat3x1 { _val: [ bbox_upper[0] + 1.5,
+                                            bbox_upper[1] + 1.5,
+                                            bbox_upper[2] + 1.5] };
         let cam_id = 0;
         let cam = camera::Cam::init( cam_id, fov, aspect, near, far, cam_pos, cam_foc_pos, cam_up );
 
@@ -318,10 +322,17 @@ impl IGameLogic for GameLogic {
             },
             _planner: Box::new( PlannerBasic::init(
                 Param{
-                    states_init: States1D(1f32),
-                    states_goal: States1D(0f32),
-                    dynamics: dynamics::dynamics_1d,
-                    stop_cond: dynamics::stop_cond_1d,
+                    // states_init: States1D(1f32),
+                    // states_goal: States1D(0f32),
+                    // dynamics: dynamics_1d,
+                    // stop_cond: stop_cond_1d,
+                    //use a Dubins car model (constant velocity, change in heading only, 2d positions)
+                    states_init: States3D([0., 0., 0.]), //positions (x,y), heading angle
+                    states_config_goal: States3D([0.9,0.9,0.]), //(x,y,heading angle)
+                    dynamics: dynamics_3d_1d, //1 input for change in heading
+                    stop_cond: stop_cond_3d,
+                    sim_delta: 0.01f32,
+                    project_state_to_config: project_dubins_car_state_to_config,
                 }
             ) ),
         };

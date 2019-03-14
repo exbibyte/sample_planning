@@ -14,7 +14,7 @@ impl States for States1D {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct States3D {}
+pub struct States3D(pub[f32;3]);
 
 impl States for States3D {
     fn get_num_dims(&self) -> i32 {
@@ -22,3 +22,11 @@ impl States for States3D {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct States6D(pub[f32;6]);
+
+impl States for States6D {
+    fn get_num_dims(&self) -> i32 {
+        6
+    }
+}
