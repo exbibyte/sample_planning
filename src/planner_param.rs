@@ -16,7 +16,7 @@ pub enum StopCondition {
 #[derive(Clone,Debug)]
 pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
     // pub memory_limit: Option<i32>,
-    pub stop_cond: fn(T,T)->bool, //uses config state matching the environment
+    pub stop_cond: fn(T/*system state*/,TObs/*config state*/,TObs/*desired configuration*/)->bool,
     pub states_init: T,
     pub states_config_goal: TObs,//todo: also include state space variables as goals?
     pub dynamics: fn(T,C,f32)->T, //uses state space of system

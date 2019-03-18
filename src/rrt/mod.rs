@@ -8,3 +8,5 @@ pub mod rrt_base;
 // pub mod rrt_moprim;
 // pub mod rrt_impsam;
 // pub mod rrt_comb;
+
+pub mod kdtree;
