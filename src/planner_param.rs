@@ -24,6 +24,9 @@ pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
     pub sim_delta: f32, //to be used as simulation step size
     pub dist_delta: f32, //to be used as tree edge expansion resolution
     pub param_sampler: fn()->C, //sampling in parameter space
+    pub ss_sampler: fn()->T, //sampleing in state space
+    pub ss_metric: fn(T,T)->f32, //distance function in state space
+    
 }
 
 #[derive(Clone,Debug)]

@@ -46,7 +46,7 @@ pub fn dynamics_dubins_car( states: States3D, control: Control1D, delta: f32 )->
     let theta_dot = control.0[0];
     States3D( [ states.0[0] + x_dot * delta,
                 states.0[1] + y_dot * delta,
-                (states.0[2] + theta_dot * delta ) % (2.*PI) ] )
+                ( (states.0[2] + theta_dot ) + 2.*PI ) % (2.*PI) ] )
 }
 
 ///project x and y
@@ -60,7 +60,7 @@ pub fn sampler_parameter_space_dubins_car() -> Control1D {
     
     let mut rng = rand::thread_rng();
     
-    Control1D( [180.*rng.gen_range(-1., 1.)/180.* PI] )
+    Control1D( [rng.gen_range(-1., 1.)*10./180.* PI] )
 }
 
 //to be used
@@ -70,15 +70,39 @@ pub fn sampler_state_space_dubins_car() -> States3D {
     
     let mut rng = rand::thread_rng();
 
-    States3D( [ rng.gen_range(-1., 1.),
-                rng.gen_range(-1., 1.),
-                rng.gen_range(-1., 1.) * PI ] )
+    States3D( [ rng.gen_range(0., 1.), //[0,1] range for x
+                rng.gen_range(0., 1.), //[0,1] range for y
+                rng.gen_range(0., 2. * PI) ] ) //[0,2*PI] for theta
 }
 
 pub fn stop_cond_dubins( system_states: States3D, states_config: States3D, states_config_goal: States3D )-> bool {
     states_config.0.iter()
         .zip( states_config_goal.0.iter() )
-        .all( |x| ((x.0)-(x.1)).abs() < 0.07 )
+        .all( |x| ((x.0)-(x.1)).abs() < 0.005 )
+}
+
+pub fn dubins_statespace_distance( a: States3D, b: States3D ) -> f32 {
+
+    use std::f32::consts::PI;
+    
+    let va = a.get_vals();
+    let vb = b.get_vals();
+
+    let mut ret = 0.;
+
+    //todo: check reference on suitable metric for rigid body orientation
+    
+    for i in 0..2{
+        ret += (va[i] - vb[i])*(va[i] - vb[i]);
+    }
+
+    let angle = (va[2] - vb[2]);
+
+    let angle_1 = (va[2] + 2.*PI)%(2.*PI);
+    let angle_2 = (vb[2] + 2.*PI)%(2.*PI);
+    ret += (angle_1-angle_2)*(angle_1-angle_2);
+
+    ret
 }
 
 // pub fn sampler_state_space_dubins_car() -> States3D {

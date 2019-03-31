@@ -3,6 +3,9 @@
 
 pub mod rrt;
 pub mod rrt_base;
+pub mod sst;
+pub mod nn_naive;
+
 // pub mod rrt_star;
 // pub mod rrt_sparse;
 // pub mod rrt_moprim;

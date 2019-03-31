@@ -39,7 +39,8 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     trajectory: Vec<TObs>,
     trajectory_edge: Vec<(TObs,TObs)>,
     fini: bool,
-    rrt_tree: rrt_base::RRT_Base<TS,TC,TObs>,
+    // rrt_tree: rrt_base::RRT_Base<TS,TC,TObs>,
+    rrt_tree: sst::SST<TS,TC,TObs>,
 }
 
 impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -74,8 +75,8 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
             trajectory: vec![],
             trajectory_edge: vec![],
             fini: false,
-            rrt_tree: rrt_base::RRT_Base::init( &param,
-                                                obs_tree ),
+            rrt_tree: sst::SST::init( &param,
+                                       obs_tree ),
         }
     }
 }
