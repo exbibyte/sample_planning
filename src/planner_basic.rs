@@ -38,6 +38,7 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     // obstacles: Bvh<usize>,
     trajectory: Vec<TObs>,
     trajectory_edge: Vec<(TObs,TObs)>,
+    witness_pairs: Vec<(TObs,TObs)>,
     fini: bool,
     // rrt_tree: rrt_base::RRT_Base<TS,TC,TObs>,
     rrt_tree: sst::SST<TS,TC,TObs>,
@@ -74,6 +75,7 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
             // obstacles: obs_tree.clone(),
             trajectory: vec![],
             trajectory_edge: vec![],
+            witness_pairs: vec![],
             fini: false,
             rrt_tree: sst::SST::init( &param,
                                        obs_tree ),
@@ -118,7 +120,9 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
         info!("plan iteration end, duration: {}us", t_delta);
         
             self.trajectory = self.rrt_tree.get_trajectory_config_space();
-            self.trajectory_edge = self.rrt_tree.get_trajectory_edges_config_space();
+        self.trajectory_edge = self.rrt_tree.get_trajectory_edges_config_space();
+
+        self.witness_pairs = self.rrt_tree.get_witness_representatives_config_space();
             // self.points = self.trajectory.iter().map(|x| x.0).collect();
             
             // loop {
@@ -166,7 +170,8 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
     fn get_states_current( & self ) -> Option<TS> {
         self.states_cur.clone()
     }
-    // fn get_stats() -> Stats {
-
-    // }
+    
+    fn get_witness_pairs( & self ) -> &[(TObs,TObs)] {
+        self.witness_pairs.as_ref()
+    }
 }

@@ -27,7 +27,7 @@ pub fn dynamics_6d_3d( states: States6D, control: Control3D, delta: f32 )-> Stat
 pub fn stop_cond_6d( states: States6D, states_goal: States6D )-> bool {
     states.0.iter()
         .zip( states_goal.0.iter() )
-        .all( |x| ((x.0)-(x.1)).abs() < 0.001 )
+        .all( |x| ((x.0)-(x.1)).abs() < 0.005 )
 }
 
 ///dubins car dynamics

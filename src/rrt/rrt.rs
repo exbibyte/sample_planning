@@ -11,5 +11,6 @@ pub trait RRT < TS, TC, TObs > where TS: States, TC: Control, TObs: States {
     fn iterate( & mut self, states_cur: TS ) -> bool;
     fn get_best_trajectory( & self ) -> Option<Vec<TS>>;
     fn reset( & mut self );
+    fn print_stats( &self ){}
 }
 

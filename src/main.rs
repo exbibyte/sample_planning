@@ -126,6 +126,15 @@ fn main() {
         })
         .collect();
 
+    let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = planner.get_witness_pairs().iter()
+        .map(|x| {
+            let a = (x.0).0;
+            let b = (x.1).0;
+            ( Point3::new(a[0],a[1],a[2]),
+              Point3::new(b[0],b[1],b[2]) )
+        })
+        .collect();
+
     let mut g1 = window.add_group();
     g1.append_translation(&Translation3::new(0.5, 0.5, 0.0));
 
@@ -149,6 +158,12 @@ fn main() {
                 window.draw_line( &x.0, &x.1, &Point3::new(1.,1.,1.) );
             } );
 
+        coords_witnesses.iter()
+            .for_each(|x| {
+                window.draw_line( &x.0, &x.1, &Point3::new(1.,0.,0.) );
+                window.draw_point( &x.0, &Point3::new(1.,1.,0.) );
+            } );
+            
         //domain perimeter
         window.set_point_size(0.3);
         coords_points.iter()
