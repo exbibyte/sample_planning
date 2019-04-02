@@ -20,5 +20,5 @@ Inputs to program
 - Importance Sampling:
   - [TODO] use of entropy based sampler for shifting towards better parameterization (https://journals.sagepub.com/doi/pdf/10.1177/0278364912444543)
 - Motion Primitives:
-  - [TODO] lookup for feasible control for steering toward a direction
+  - [TODO] lookup for feasible control for steering toward a direction (https://arxiv.org/pdf/1809.02399.pdf)
   
