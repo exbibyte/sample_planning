@@ -1,7 +1,7 @@
 # Briefing
 Sample Based Motion Planning. Work in Progress.
 
-This project is intended for replication of several general ideas:
+This project is intended as educational replication of several general ideas:
 - Sparcity (Eg: Stable Sparse RRT)
 - Motion Primitives
 - Importance Sampling
