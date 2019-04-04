@@ -23,18 +23,21 @@ Inputs to program
   - [TODO] investigate and select collision detection library/algorithm (currently uses naive algo as placeholder).
   
 # Running Planner
-- build and run in release mode with: cargo run --release --bin planner -- -o <file_obstacle>
-- required arguments:
-  -o <file_obstacle>: obstacle file path (Eg: cargo run --release --bin planner -- -o obstacles/obs1.txt)
-- optional arguments:
-  -w: show witness node and witness representative pairs (cargo run --release --bin planner -- -w)
-      - drawn as a line(red) with end points (purple: witness), (blue: witness representative)
-  -i <N>: max iterations (cargo run --release --bin planner -- -i <N>)
-  -m <model>: model selection (cargo run --release --bin planner -- -m <model>), defaults to dubins
-      - <model> variants: dubins
-- help: cargo run --release --bin planner -- --help
+* build and run in release mode with: cargo run --release --bin planner -- -o <file_obstacle>
+* required arguments:
+  * -o <file_obstacle>: obstacle file path (eg: cargo run --release --bin planner -- -o obstacles/obs1.txt)
+* optional arguments:
+  * -w: show witness node and witness representative pairs (cargo run --release --bin planner -- -w)
+      * drawn as a line(red) with end points (purple: witness), (blue: witness representative)
+  * -i <N>: max iterations (cargo run --release --bin planner -- -i <N>)
+  * -m <model>: model selection (cargo run --release --bin planner -- -m <model>), defaults to dubins
+      * <model> variants: dubins
+  * -h: cargo run --release --bin planner -- --h
 
 # Running Obstacle Generator
-- build and run in release mode with: cargo run --release --bin gen_obs -- -f <output_file_path>
-  - Eg: cargo run --release --bin gen_obs -- -f obstacles/obs99.txt
-- help: cargo run --release --bin gen_obs -- --help
+* build and run in release mode with: cargo run --release --bin gen_obs -- -f <output_file_path>
+* required arguments:
+  * -f <output_file_path> (eg: cargo run --release --bin gen_obs -- -f obstacles/obs99.txt)
+* optional arguments:
+  * -n <N>: number of obstacles to be generated
+  * -h: cargo run --release --bin gen_obs -- --h
