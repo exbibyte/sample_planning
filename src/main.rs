@@ -5,13 +5,14 @@
 extern crate pretty_env_logger;
 
 use std::env;
+use std::collections::HashMap;
 
 mod planner_param;
 mod planner;
 mod planner_basic;
 mod stats;
 mod states;
-mod dynamics;
+mod dynamics_dubins;
 mod rrt;
 mod control;
 
@@ -19,7 +20,6 @@ use planner_param::{Param,ParamObstacles};
 use planner::Planner;
 use planner_basic::{PlannerBasic};
 use states::*;
-use dynamics::*;
 use control::*;
 // // use stats::Stats;
 extern crate chrono;
@@ -79,6 +79,7 @@ fn main() {
     env::set_var("LOG_SETTING", "info" );
     pretty_env_logger::init_custom_env( "LOG_SETTING" );
 
+    //command line ---
     let matches = App::new("sample_planner")
         .version("0.0")
         .author("Yuan Liu")
@@ -91,45 +92,52 @@ fn main() {
              .help("iteration upper bound")
              .default_value("150000")
              .takes_value(true))
+        .arg(Arg::with_name("model")
+             .short("m")
+             .help("model selection")
+             .default_value("dubins")
+             .takes_value(true))
         .get_matches();
 
     let display_witness_info = matches.is_present("witness");
-
     
-    let iterations : u32 = matches.value_of( "iterations" ).unwrap().parse().expect("iteration argument not a number" );
-    
-    //plan ---
+    let iterations : u32 = matches
+        .value_of( "iterations" ).unwrap()
+        .parse().expect("iteration argument not a number" );
 
-    let param_sel = 0;
-    let params = [
-        Param{
-            //todo: put switches for using different models
-            //use a Dubins car model (constant velocity, change in heading only, z elevation constant)
-            states_init: States3D([0.15, 0.15, 0.]), //positions (x,y), heading angle
-            states_config_goal: States3D([0.85,0.85,0.]), //(x,y,heading angle)
-            dynamics: dynamics_dubins_car, //1 input for change in heading
-            stop_cond: stop_cond_dubins,
-            sim_delta: 0.06f32, //upper bound for propagation delta
-            project_state_to_config: project_dubins_car_state_to_config,
-            param_sampler: sampler_parameter_space_dubins_car,
-            ss_sampler: sampler_state_space_dubins_car,
-            ss_metric: dubins_statespace_distance,
-            iterations_bound: iterations,
+    //dynamical model selection ---
+    
+    let model_query = matches.value_of("model").unwrap();
+
+    let models : HashMap<_,_> = vec![
+        ("dubins", dynamics_dubins::load_model())
+    ].into_iter().collect();
+
+    let model_sel = match models.get( model_query ) {
+        Some(m) => {
+            info!("model selected: {}", model_query);
+            let mut model_default = m.clone();
+            model_default.iterations_bound = iterations;
+            model_default
         },
-    ];
+        _ => { panic!("model not found: {}", model_query) },
+    };
 
+    //obstructions ---
     let obs = generate_obstacles::<States3D>();
     let obs_copy = obs.clone();
     let mut planner : Box<Planner<States3D,Control1D,States3D> > = 
-        Box::new( PlannerBasic::init( params[param_sel].clone(),
+        Box::new( PlannerBasic::init( model_sel.clone(),
                                       obs ) );
-    
+
+    //plan ---
     let _iterations = 0;
     let _time_game = 0;
 
     let (end_current_loop, end_all) = planner.plan_iteration( _iterations, _time_game );
 
     //render ---
+
     let mut window = Window::new("Sample Planner");
     window.set_light(Light::StickToCamera);
     
@@ -146,6 +154,7 @@ fn main() {
         })
         .collect();
 
+    //(witness, witness representative) pairs
     let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = planner.get_witness_pairs().iter()
         .map(|x| {
             let a = (x.0).0;
@@ -163,7 +172,6 @@ fn main() {
     c.set_lines_width(5.);
     c.set_points_size(5.0);
     c.set_surface_rendering_activation(false);
-
 
     let obs_data : Vec<_> = obs_copy.obstacles.iter()
         .map(|x| {
@@ -197,19 +205,19 @@ fn main() {
         window.set_point_size(10.);
         
         //start point
-        window.draw_point( &Point3::from(&params[param_sel].states_init),
+        window.draw_point( &Point3::from( &model_sel.states_init ),
                             &Point3::new(0.,1.,0.) );
         //dest point
-        window.draw_point( &Point3::from(&params[param_sel].states_config_goal),
+        window.draw_point( &Point3::from( &model_sel.states_config_goal ),
                             &Point3::new(1.,0.,0.) );
 
-        obs_data.iter()
-            .for_each(|x| {
-                let a = x.0;
-                let b = x.1;
-                let mut c = window.add_cube( a.0, a.1, a.2 );
-                c.append_translation( &Translation3::new( b.0, b.1, b.2 ) );
-                c.set_color(0.8, 0.8, 0.);
-            });
+        // obs_data.iter()
+        //     .for_each(|x| {
+        //         let a = x.0;
+        //         let b = x.1;
+        //         let mut c = window.add_cube( a.0, a.1, a.2 );
+        //         c.append_translation( &Translation3::new( b.0, b.1, b.2 ) );
+        //         c.set_color(0.8, 0.8, 0.);
+        //     });
     }
 }

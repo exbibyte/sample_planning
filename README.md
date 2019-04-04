@@ -25,4 +25,7 @@ Inputs to program
 # Running
 - build and run in release mode with: cargo run --release
 - optional arguments: -w: show witness node and witness representative pairs (cargo run --release -- -w)
+  - drawn as a line(red) with end points (purple: witness), (blue: witness representative)
 - optional arguments: -i: max iterations (cargo run --release -- -i <N>)
+- optional arguments: -m: model selection (cargo run --release -- -m <model>), defaults to dubins
+  - <model> options: dubins
