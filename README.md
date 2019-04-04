@@ -43,5 +43,5 @@ Inputs to program
   * -h: cargo run --release --bin gen_obs -- --h
 
 <p align="center">
-   <img src="images/screenshot0.png" alt="drawing" style="width:500px;"/>
+   <img src="images/screenshot0.png" alt="drawing" width="300" height="300"/>
 </p>
