@@ -41,6 +41,17 @@ use rrt::kdtree;
 extern crate clap;
 use clap::{Arg, App, SubCommand};
 
+extern crate serde;
+use serde::{Serialize,Deserialize};
+
+#[derive(Serialize, Deserialize)]
+struct ObsData(pub [f32; 4]);
+
+#[derive(Serialize, Deserialize)]
+struct Obs {
+    obs: Vec<ObsData>,
+}
+
 impl From<&States3D> for Point3<f32> {
     fn from(i: &States3D) -> Point3<f32> {
         Point3::new( i.0[0],
@@ -49,6 +60,7 @@ impl From<&States3D> for Point3<f32> {
     }
 }
 
+///alternative to loading a obstacle file
 fn generate_obstacles<TObs>() -> ParamObstacles<TObs> where TObs: States {
 
     use std::marker::PhantomData;
@@ -74,6 +86,32 @@ fn generate_obstacles<TObs>() -> ParamObstacles<TObs> where TObs: States {
     }
 }
 
+fn load_obs_from_file<TObs>(f: &str) -> ParamObstacles<TObs> where TObs: States {
+
+    use std::marker::PhantomData;
+    use std::fs::File;
+    use std::io::Read;
+    
+    let mut s = String::new();
+    let mut f = File::open(f).expect("obstacle file cannot be opened");
+    f.read_to_string(& mut s).expect("file cannot be read to string");
+    let obs : Obs = serde_json::from_str( s.as_str() ).expect("obstacle deserialization failed");
+    
+    let boxes = obs.obs.iter()
+        .map(|x| {
+            let coords = x.0;
+            RecBox::init( &[ coords[0] as _, //x
+                             coords[1] as _, //y
+                             coords[2] as _], //z
+                             coords[3] as _) //size
+        } ).collect::<Vec<_>>();
+    
+    ParamObstacles {
+        obstacles: boxes,
+        states_info: PhantomData,
+    }    
+}
+
 fn main() {
 
     env::set_var("LOG_SETTING", "info" );
@@ -96,6 +134,11 @@ fn main() {
              .short("m")
              .help("model selection")
              .default_value("dubins")
+             .takes_value(true))
+        .arg(Arg::with_name("obstacle")
+             .short("o")
+             .help("obstacle file")
+             .required(true)
              .takes_value(true))
         .get_matches();
 
@@ -124,7 +167,10 @@ fn main() {
     };
 
     //obstructions ---
-    let obs = generate_obstacles::<States3D>();
+    // let obs = generate_obstacles::<States3D>();
+    let file_obs : & str = matches.value_of("obstacle").unwrap();
+    let obs = load_obs_from_file::<States3D>(file_obs);
+    
     let obs_copy = obs.clone();
     let mut planner : Box<Planner<States3D,Control1D,States3D> > = 
         Box::new( PlannerBasic::init( model_sel.clone(),
@@ -211,13 +257,13 @@ fn main() {
         window.draw_point( &Point3::from( &model_sel.states_config_goal ),
                             &Point3::new(1.,0.,0.) );
 
-        // obs_data.iter()
-        //     .for_each(|x| {
-        //         let a = x.0;
-        //         let b = x.1;
-        //         let mut c = window.add_cube( a.0, a.1, a.2 );
-        //         c.append_translation( &Translation3::new( b.0, b.1, b.2 ) );
-        //         c.set_color(0.8, 0.8, 0.);
-        //     });
+        obs_data.iter()
+            .for_each(|x| {
+                let a = x.0;
+                let b = x.1;
+                let mut c = window.add_cube( a.0, a.1, a.2 );
+                c.append_translation( &Translation3::new( b.0, b.1, b.2 ) );
+                c.set_color(0.8, 0.8, 0.);
+            });
     }
 }

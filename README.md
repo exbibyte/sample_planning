@@ -22,10 +22,19 @@ Inputs to program
 - Collision:
   - [TODO] investigate and select collision detection library/algorithm (currently uses naive algo as placeholder).
   
-# Running
-- build and run in release mode with: cargo run --release
-- optional arguments: -w: show witness node and witness representative pairs (cargo run --release -- -w)
-  - drawn as a line(red) with end points (purple: witness), (blue: witness representative)
-- optional arguments: -i: max iterations (cargo run --release -- -i <N>)
-- optional arguments: -m: model selection (cargo run --release -- -m <model>), defaults to dubins
-  - <model> options: dubins
+# Running Planner
+- build and run in release mode with: cargo run --release --bin planner -- -o <file_obstacle>
+- required arguments:
+  -o <file_obstacle>: obstacle file path (Eg: cargo run --release --bin planner -- -o obstacles/obs1.txt)
+- optional arguments:
+  -w: show witness node and witness representative pairs (cargo run --release --bin planner -- -w)
+      - drawn as a line(red) with end points (purple: witness), (blue: witness representative)
+  -i <N>: max iterations (cargo run --release --bin planner -- -i <N>)
+  -m <model>: model selection (cargo run --release --bin planner -- -m <model>), defaults to dubins
+      - <model> variants: dubins
+- help: cargo run --release --bin planner -- --help
+
+# Running Obstacle Generator
+- build and run in release mode with: cargo run --release --bin gen_obs -- -f <output_file_path>
+  - Eg: cargo run --release --bin gen_obs -- -f obstacles/obs99.txt
+- help: cargo run --release --bin gen_obs -- --help
