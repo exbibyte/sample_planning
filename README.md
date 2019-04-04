@@ -6,11 +6,11 @@ This project is intended as educational replication of several general ideas:
 - Motion Primitives
 - Importance Sampling
 
-A sub goal of this project is to integrate and leverage benefits of several of these ideas in a hybrid solution.
+A sub-goal of this project is to integrate and leverage benefits of several of these ideas in a hybrid solution.
 
 Inputs to program
 - system dynamics and various constraints are supplied as functions
-- [TODO] environment obstacles are suppled in some format
+- environment obstacles
 
 # Progress
 - Sparcity:
@@ -19,7 +19,7 @@ Inputs to program
   - [TODO] use of entropy based sampler for shifting towards better parameterization (https://journals.sagepub.com/doi/pdf/10.1177/0278364912444543)
 - Motion Primitives:
   - [TODO] lookup for feasible control for steering toward a direction (https://arxiv.org/pdf/1809.02399.pdf)
-- Collision:
+- Collision detection with dynamic addition/deletion operations:
   - [TODO] investigate and select collision detection library/algorithm (currently uses naive algo as placeholder).
   
 # Running Planner
