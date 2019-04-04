@@ -42,6 +42,8 @@ Inputs to program
   * -n <N>: number of obstacles to be generated (default: 30)
   * -h: cargo run --release --bin gen_obs -- --h
 
+# Screenshots
+
 <p align="center">
-   <img src="images/screenshot0.png" alt="drawing" width="300" height="300"/>
+   <img src="images/screenshot0.png" alt="drawing" width="400" height="400"/>
 </p>
