@@ -206,12 +206,15 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             state_propagate = (self.param.dynamics)( state_propagate,
                                                      param_sample.clone(),
                                                      monte_carlo_prop_delta );
-            
-            // let vals = &state_update.get_vals();
-            // if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT, &[vals[0] as f64,vals[1] as f64,vals[2] as f64] ) ).unwrap().is_empty() {
+
+            let config_space_coord = (self.param.project_state_to_config)(state_propagate.clone());
                 
-            //     continue;
-            // }
+            let vals = &config_space_coord.get_vals();
+            
+            if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT, &[vals[0] as f64,vals[1] as f64,vals[2] as f64] ) ).unwrap().is_empty() {
+                self.stat_iter_no_change += 1;
+                continue;
+            }
 
             let witness_idx = match self.nn_query.query_nearest_witness( state_propagate.clone(),
                                                                          & self.witnesses, 

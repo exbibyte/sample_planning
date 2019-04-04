@@ -109,7 +109,7 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
 
             self.states_cur = Some(self.param.states_init.clone());
 
-            // let mut tree = rrt_base::RRT_Base::init( & self.param, & obstacles );
+        // let mut tree = rrt_base::RRT_Base::init( & self.param, & obstacles );
 
         let t0 = Local::now();
         
