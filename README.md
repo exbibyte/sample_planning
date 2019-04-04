@@ -45,5 +45,5 @@ Inputs to program
 # Screenshots
 
 <p align="center">
-   <img src="images/screenshot0.png" alt="drawing" width="400" height="400"/>
+   <img src="images/screenshot0.png" alt="drawing" width="500" height="500"/>
 </p>
