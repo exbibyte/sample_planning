@@ -1,4 +1,4 @@
-#![feature(label_break_value)]
+// #![feature(label_break_value)]
 
 #[macro_use] extern crate log;
 
@@ -38,6 +38,9 @@ use kiss3d::light::Light;
 
 use rrt::kdtree;
 
+extern crate clap;
+use clap::{Arg, App, SubCommand};
+
 impl From<&States3D> for Point3<f32> {
     fn from(i: &States3D) -> Point3<f32> {
         Point3::new( i.0[0],
@@ -76,22 +79,42 @@ fn main() {
     env::set_var("LOG_SETTING", "info" );
     pretty_env_logger::init_custom_env( "LOG_SETTING" );
 
-    //plan ---
+    let matches = App::new("sample_planner")
+        .version("0.0")
+        .author("Yuan Liu")
+        .about("a toy planner")
+        .arg(Arg::with_name("witness")
+             .short("w")
+             .help("shows witness node and witness representative"))
+        .arg(Arg::with_name("iterations")
+             .short("i")
+             .help("iteration upper bound")
+             .default_value("150000")
+             .takes_value(true))
+        .get_matches();
+
+    let display_witness_info = matches.is_present("witness");
+
     
+    let iterations : u32 = matches.value_of( "iterations" ).unwrap().parse().expect("iteration argument not a number" );
+    
+    //plan ---
+
     let param_sel = 0;
     let params = [
         Param{
+            //todo: put switches for using different models
             //use a Dubins car model (constant velocity, change in heading only, z elevation constant)
             states_init: States3D([0.15, 0.15, 0.]), //positions (x,y), heading angle
             states_config_goal: States3D([0.85,0.85,0.]), //(x,y,heading angle)
             dynamics: dynamics_dubins_car, //1 input for change in heading
             stop_cond: stop_cond_dubins,
-            sim_delta: 0.04f32,
+            sim_delta: 0.06f32, //upper bound for propagation delta
             project_state_to_config: project_dubins_car_state_to_config,
             param_sampler: sampler_parameter_space_dubins_car,
             ss_sampler: sampler_state_space_dubins_car,
             ss_metric: dubins_statespace_distance,
-            iterations_bound: 100_000,
+            iterations_bound: iterations,
         },
     ];
 
@@ -157,17 +180,19 @@ fn main() {
             
         //domain perimeter
         window.set_point_size(0.3);
+        
         // coords_points.iter()
         //     .for_each(|x| { window.draw_point( &x, &Point3::new(0.,0.,1.) ); } );
 
-
-        coords_witnesses.iter()
-            .for_each(|x| {
-                window.draw_line( &x.0, &x.1, &Point3::new(1.,0.,0.) );
-                window.set_point_size(0.45);
-                window.draw_point( &x.0, &Point3::new(1.,0.,1.) );
-                window.draw_point( &x.1, &Point3::new(0.,0.,1.) );
-            } );
+        if display_witness_info {
+            coords_witnesses.iter()
+                .for_each(|x| {
+                    window.draw_line( &x.0, &x.1, &Point3::new(1.,0.,0.) );
+                    window.set_point_size(0.45);
+                    window.draw_point( &x.0, &Point3::new(1.,0.,1.) );
+                    window.draw_point( &x.1, &Point3::new(0.,0.,1.) );
+                } );
+        }
         
         window.set_point_size(10.);
         

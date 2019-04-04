@@ -5,14 +5,15 @@ authors = ["Bill Liu <yuan6liu@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-e2r = "0.10.0"
+# e2r = "0.10.0"
 mazth = "0.2"
 zpatial = "0.2.4"
 chrono = "0.4"
 nom = "*"
 log = "*"
-image = "*"
+# image = "*"
 rand = "*"
 pretty_env_logger = "*"
 kiss3d = "0.18"
 nalgebra = ""
+clap = "~2.32"

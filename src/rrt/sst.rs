@@ -68,6 +68,8 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
     pub stat_pruned_nodes: u32,
     pub stat_iter_no_change: u32,
+
+    pub iter_exec: u32,
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -130,8 +132,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             witnesses: vec![],
             witness_representative: HashMap::new(),
             edges: HashMap::new(),
-            delta_v: 0.005,
-            delta_s: 0.002,
+            delta_v: 0.03,
+            delta_s: 0.01,
             
             nodes_active: HashSet::new(),
             nodes_inactive: HashSet::new(),
@@ -145,6 +147,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             stat_pruned_nodes: 0,
             stat_iter_no_change: 0,
+
+            iter_exec: param.iterations_bound,
         }
     }
 
@@ -157,24 +161,27 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
         self.edges = HashMap::new();
         self.witnesses = vec![ self.param.states_init.clone() ];
+        self.witness_representative.clear();
         self.nodes_active = HashSet::new();
         self.nodes_active.insert( 0 );
         self.nodes_inactive.clear();
         self.link_parent.clear();
         self.nodes_freelist.clear();
-        
+        self.stat_pruned_nodes = 0;
+        self.stat_iter_no_change = 0;
+        self.iter_exec = self.param.iterations_bound;
     }
 
     fn iterate( & mut self, states_cur: TS ) -> bool {
         
         self.reset();
-
+        
         for i in 0..self.param.iterations_bound {
             // println!("iteration: {}", i );
             let ss_sample = (self.param.ss_sampler)(); //sampler for state space
 
             // dbg!(&ss_sample);
-            
+
             //get best active state in vicinity delta_v of ss_sample, or return nearest active state
             let idx_state_best_nearest = self.nn_query.query_nearest_state_active( ss_sample.clone(),
                                                                                    & self.nodes,
@@ -183,15 +190,22 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                                                                    self.delta_v );
 
             // dbg!(idx_state_best_nearest);
-            
-            let param_sample = (self.param.param_sampler)(self.param.sim_delta); //sampler for control space
+
+            //propagation with random delta within range of specified upper bound
+            let mut rng = rand::thread_rng();
+            let monte_carlo_prop_delta = rng.gen_range(0., 1.) * self.param.sim_delta;
+
+            //sampler for control space
+            let param_sample = (self.param.param_sampler)( monte_carlo_prop_delta );
 
             //propagate/simulate state dynamics
             //todo: collision checking with configuration space
             let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + 1;
             let mut state_propagate = self.nodes[idx_state_best_nearest].state.clone();
             
-            state_propagate = (self.param.dynamics)( state_propagate, param_sample.clone(), self.param.sim_delta );
+            state_propagate = (self.param.dynamics)( state_propagate,
+                                                     param_sample.clone(),
+                                                     monte_carlo_prop_delta );
             
             // let vals = &state_update.get_vals();
             // if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT, &[vals[0] as f64,vals[1] as f64,vals[2] as f64] ) ).unwrap().is_empty() {
@@ -316,6 +330,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             
             if self.reached_goal( state_propagate ) {
                 info!("found a path to goal on iteration: {}", i );
+                self.iter_exec = i;
                 break;
             }
         }
@@ -333,6 +348,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         info!( "nodes inactive: {}", self.nodes_inactive.len() );
         info!( "pruned_nodes: {}", self.stat_pruned_nodes );
         info!( "nodes freelist: {}", self.nodes_freelist.len() );
-        info!( "iterations no change: {}/{}", self.stat_iter_no_change, self.param.iterations_bound );
+        info!( "iterations no change: {}/{}", self.stat_iter_no_change, self.iter_exec );
     }
 }

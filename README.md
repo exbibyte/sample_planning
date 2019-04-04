@@ -22,3 +22,7 @@ Inputs to program
 - Collision:
   - [TODO] investigate and select collision detection library/algorithm (currently uses naive algo as placeholder).
   
+# Running
+- build and run in release mode with: cargo run --release
+- optional arguments: -w: show witness node and witness representative pairs (cargo run --release -- -w)
+- optional arguments: -i: max iterations (cargo run --release -- -i <N>)
