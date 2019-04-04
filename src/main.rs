@@ -86,12 +86,12 @@ fn main() {
             states_config_goal: States3D([0.85,0.85,0.]), //(x,y,heading angle)
             dynamics: dynamics_dubins_car, //1 input for change in heading
             stop_cond: stop_cond_dubins,
-            sim_delta: 0.01f32,
-            dist_delta: 0.04f32,
+            sim_delta: 0.04f32,
             project_state_to_config: project_dubins_car_state_to_config,
             param_sampler: sampler_parameter_space_dubins_car,
             ss_sampler: sampler_state_space_dubins_car,
             ss_metric: dubins_statespace_distance,
+            iterations_bound: 100_000,
         },
     ];
 
@@ -104,14 +104,11 @@ fn main() {
     let _iterations = 0;
     let _time_game = 0;
 
-    //render ---
-    
-    let mut window = Window::new("Sample Planner");
-    window.set_light(Light::StickToCamera);
-
     let (end_current_loop, end_all) = planner.plan_iteration( _iterations, _time_game );
 
-    println!("iteration");
+    //render ---
+    let mut window = Window::new("Sample Planner");
+    window.set_light(Light::StickToCamera);
     
     let coords_points : Vec<Point3<f32>> = planner.get_trajectories().iter()
         .map(|x| Point3::from(x) )
@@ -157,18 +154,20 @@ fn main() {
             .for_each(|x| {
                 window.draw_line( &x.0, &x.1, &Point3::new(1.,1.,1.) );
             } );
+            
+        //domain perimeter
+        window.set_point_size(0.3);
+        // coords_points.iter()
+        //     .for_each(|x| { window.draw_point( &x, &Point3::new(0.,0.,1.) ); } );
+
 
         coords_witnesses.iter()
             .for_each(|x| {
                 window.draw_line( &x.0, &x.1, &Point3::new(1.,0.,0.) );
-                window.draw_point( &x.0, &Point3::new(1.,1.,0.) );
+                window.set_point_size(0.45);
+                window.draw_point( &x.0, &Point3::new(1.,0.,1.) );
+                window.draw_point( &x.1, &Point3::new(0.,0.,1.) );
             } );
-            
-        //domain perimeter
-        window.set_point_size(0.3);
-        coords_points.iter()
-            .for_each(|x| { window.draw_point( &x, &Point3::new(0.,0.,1.) ); } );
-
         
         window.set_point_size(10.);
         

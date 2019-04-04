@@ -22,10 +22,10 @@ pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
     pub dynamics: fn(T,C,f32)->T, //uses state space of system
     pub project_state_to_config: fn(T)->TObs,
     pub sim_delta: f32, //to be used as simulation step size
-    pub dist_delta: f32, //to be used as tree edge expansion resolution
-    pub param_sampler: fn()->C, //sampling in parameter space
+    pub param_sampler: fn(f32)->C, //sampling in parameter space
     pub ss_sampler: fn()->T, //sampleing in state space
     pub ss_metric: fn(T,T)->f32, //distance function in state space
+    pub iterations_bound: u32,
     
 }
 

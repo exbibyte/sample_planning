@@ -89,7 +89,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for RRT_Base<TS,TC,TObs> where TS: States, 
         self.edges = HashMap::new();
         
         for i in 0..25000 {
-            let param_sample = (self.param.param_sampler)();
+            let param_sample = (self.param.param_sampler)( self.param.sim_delta );
             
             let mut rng = rand::thread_rng();
             
@@ -97,9 +97,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for RRT_Base<TS,TC,TObs> where TS: States, 
             
             let mut state_update = self.nodes[state_select_id].state.clone();
             
-            for i in 0 .. (self.param.dist_delta / self.param.sim_delta) as usize {
-                state_update = (self.param.dynamics)( state_update, param_sample.clone(), self.param.sim_delta );
-            }
+            state_update = (self.param.dynamics)( state_update, param_sample.clone(), self.param.sim_delta );
 
             let vals = &state_update.get_vals();
             if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT, &[vals[0] as f64,vals[1] as f64,vals[2] as f64] ) ).unwrap().is_empty() {

@@ -24,10 +24,17 @@ use zpatial::mazth::{
 };
 
 pub struct Node<TS> {
+    
+    ///current node index
     pub id: usize,
+
+    ///state space value
     pub state: TS,
+
+    ///child node indices
     pub children: HashSet<(usize)>,
-    pub active_descendents: u32,
+    
+    ///cost in terms of number of steps from the root of the propagation tree
     pub cost: u32,
 }
 
@@ -36,21 +43,23 @@ pub struct Edge <TC> {
 }
 
 pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
+    
     pub param: Param<TS,TC,TObs>,
     pub obstacles: Bvh<usize>,//todo
 
     pub nodes: Vec< Node<TS> >,
     pub witnesses: Vec<TS>,
     pub witness_representative: HashMap< usize, usize >,
-    pub nodes_freelist: Vec<usize>, //saves list of indices to nodes
     
-    //topology info for the graph
+    ///free slots in nodes for future node initialization
+    pub nodes_freelist: Vec<usize>,
+    
+    ///extra info useful for tree pruning
     pub nodes_active: HashSet< usize >,
     pub nodes_inactive: HashSet< usize >,
     pub link_parent: HashMap< usize, usize >, //node -> node_parent
-    // pub link_child: HashMap< usize, HashSet< usize > >,
-    // pub link_child_active: HashMap< usize, HashSet< usize > >,
-    
+
+    ///storage for control input for the state space pair (parent node,child node)
     pub edges: HashMap< (usize,usize), Edge<TC> >,
     pub delta_v: f32,
     pub delta_s: f32,
@@ -58,12 +67,11 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub nn_query: NN_Naive<TS,TC,TObs>,
 
     pub stat_pruned_nodes: u32,
+    pub stat_iter_no_change: u32,
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-    // pub fn new_node_id( & self ) -> usize {
-    //     self.nodes.len()
-    // }
+
     pub fn get_trajectory_config_space( & self ) -> Vec<TObs> {
         self.nodes.iter()
             .map(|x| (self.param.project_state_to_config)(x.state.clone()) )
@@ -116,21 +124,18 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             nodes: vec![ Node { id: 0,
                                 state: param.states_init.clone(),
                                 children: HashSet::new(),
-                                active_descendents: 0,
                                 cost: 0 } ],
 
             nodes_freelist: vec![],
             witnesses: vec![],
             witness_representative: HashMap::new(),
             edges: HashMap::new(),
-            delta_v: 0.02,
-            delta_s: 0.005,
+            delta_v: 0.005,
+            delta_s: 0.002,
             
             nodes_active: HashSet::new(),
             nodes_inactive: HashSet::new(),
             link_parent: HashMap::new(),
-            // link_child: HashMap::new(),
-            // link_child_active: HashMap::new(),
 
             nn_query: NN_Naive {
                 phantom_ts: PhantomData,
@@ -139,6 +144,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             },
 
             stat_pruned_nodes: 0,
+            stat_iter_no_change: 0,
         }
     }
 
@@ -147,7 +153,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.nodes = vec![ Node { id: 0,
                                   state: self.param.states_init.clone(),
                                   children: HashSet::new(),
-                                  active_descendents: 0,
                                   cost: 0 } ];
 
         self.edges = HashMap::new();
@@ -157,8 +162,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.nodes_inactive.clear();
         self.link_parent.clear();
         self.nodes_freelist.clear();
-        // self.link_child.clear();
-        // self.link_child_active.clear();
         
     }
 
@@ -166,7 +169,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         
         self.reset();
 
-        for i in 0..125_000 {
+        for i in 0..self.param.iterations_bound {
             // println!("iteration: {}", i );
             let ss_sample = (self.param.ss_sampler)(); //sampler for state space
 
@@ -181,22 +184,20 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             // dbg!(idx_state_best_nearest);
             
-            let param_sample = (self.param.param_sampler)(); //sampler for control space
+            let param_sample = (self.param.param_sampler)(self.param.sim_delta); //sampler for control space
 
             //propagate/simulate state dynamics
             //todo: collision checking with configuration space
             let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + 1;
             let mut state_propagate = self.nodes[idx_state_best_nearest].state.clone();
-            for i in 0 .. (self.param.dist_delta / self.param.sim_delta) as usize {
-                state_propagate = (self.param.dynamics)( state_propagate, param_sample.clone(), self.param.sim_delta );
-            }
+            
+            state_propagate = (self.param.dynamics)( state_propagate, param_sample.clone(), self.param.sim_delta );
             
             // let vals = &state_update.get_vals();
             // if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT, &[vals[0] as f64,vals[1] as f64,vals[2] as f64] ) ).unwrap().is_empty() {
                 
             //     continue;
             // }
-            // dbg!(&state_propagate);
 
             let witness_idx = match self.nn_query.query_nearest_witness( state_propagate.clone(),
                                                                          & self.witnesses, 
@@ -215,9 +216,9 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             match self.witness_representative.get_mut( &witness_idx ) {
                 Some(x) => {
                     if state_propagate_cost < self.nodes[*x].cost {
-                        let node_inactive = *x;
-                        self.nodes_active.remove(x);
-                        self.nodes_inactive.insert(*x);
+                        let node_inactive : usize = *x;
+                        self.nodes_active.remove(&node_inactive);
+                        self.nodes_inactive.insert(node_inactive);
 
                         //use freelist if possible
                         let idx_node_new = match self.nodes_freelist.pop() {
@@ -225,7 +226,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                 self.nodes[slot] = Node { id: slot,
                                                           state: state_propagate.clone(),
                                                           children: HashSet::new(),
-                                                          active_descendents: 0,
                                                           cost: state_propagate_cost };
                                 slot
                             },
@@ -234,62 +234,49 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                 self.nodes.push( Node { id: idx_node_new,
                                                         state: state_propagate.clone(),
                                                         children: HashSet::new(),
-                                                        active_descendents: 0,
                                                         cost: state_propagate_cost } );
                                 idx_node_new
                             },
                         };
-                        
-                        // let idx_node_new = self.nodes.len();
+                        assert!(node_inactive != idx_node_new);
                         
                         *x = idx_node_new; //save new representative state idx for current witness
                         self.nodes_active.insert(idx_node_new);
-                        // self.nodes.push( Node { id: idx_node_new,
-                        //                         state: state_propagate.clone(),
-                        //                         children: HashSet::new(),
-                        //                         active_descendents: 0,
-                        //                         cost: state_propagate_cost } );
 
                         self.nodes[idx_state_best_nearest].children.insert(idx_node_new);
                        
                         self.link_parent.insert( idx_node_new, idx_state_best_nearest );
 
                         self.edges.insert( (idx_state_best_nearest, idx_node_new), Edge { control: param_sample } );
-
-                        //increment active descendent count
-                        let mut cur = idx_node_new;
-                        loop {
-                            match self.link_parent.get(&cur) {
-                                Some(par) => {
-                                    self.nodes[*par].active_descendents += 1;
-                                    cur = *par;
-                                },
-                                _ => { break; },
-                            }
-                        }
                         
-                        //remove leaf nodes and branches from propagation tree if possible
+                        // //remove leaf nodes and branches from propagation tree if possible
                         let mut node_prune = node_inactive;
+                        
                         loop {
-                            if self.nodes[ node_prune ].active_descendents == 0 {
-                                
+                            if self.nodes[ node_prune ].children.is_empty() &&
+                                !self.nodes_active.contains( & node_prune ) {
+                                    
                                 self.nodes_inactive.remove( & node_prune );
                                 self.nodes_freelist.push( node_prune );
-                                let par = match self.link_parent.get( & node_prune ){
+                                let parent_idx = match self.link_parent.get( & node_prune ){
                                     Some(par) => { *par },
-                                    _ => {break;},
+                                    _ => {
+                                        break;
+                                    },
                                 };
-                                self.edges.remove( &(par, node_prune) );
                                 self.link_parent.remove( & node_prune );
-                                self.nodes[ par ].children.remove( & node_prune );
-                                node_prune = par;
+                                self.edges.remove( &(parent_idx, node_prune) );
+                                self.nodes[ parent_idx ].children.remove( & node_prune );
+                                node_prune = parent_idx;
 
                                 self.stat_pruned_nodes += 1;
-
+                                    
                             } else {
                                 break;
                             }
                         }
+                    }else{
+                        self.stat_iter_no_change += 1;
                     }
                 },
                 _ => {
@@ -301,7 +288,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                             self.nodes[slot] = Node { id: slot,
                                                       state: state_propagate.clone(),
                                                       children: HashSet::new(),
-                                                      active_descendents: 0,
                                                       cost: state_propagate_cost };
                             slot
                         },
@@ -310,40 +296,20 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                             self.nodes.push( Node { id: idx_node_new,
                                                     state: state_propagate.clone(),
                                                     children: HashSet::new(),
-                                                    active_descendents: 0,
                                                     cost: state_propagate_cost } );
                             idx_node_new
                         },
                     };
 
-                    
-                    // let idx_node_new = self.nodes.len();
                     self.witness_representative.insert( witness_idx, idx_node_new ); //save new representative state idx for current witness
                     self.nodes_active.insert(idx_node_new);
-                    // self.nodes.push( Node { id: idx_node_new,
-                    //                         state: state_propagate.clone(),
-                    //                         children: HashSet::new(),
-                    //                         active_descendents: 0,
-                    //                         cost: state_propagate_cost } );
 
                     self.nodes[idx_state_best_nearest].children.insert(idx_node_new);
 
                     self.link_parent.insert( idx_node_new, idx_state_best_nearest );
 
                     self.edges.insert( (idx_state_best_nearest, idx_node_new), Edge { control: param_sample } );
-
-                    //increment active descendent count
-                    let mut cur = idx_node_new;
-                    loop {
-                        match self.link_parent.get(&cur) {
-                            Some(par) => {
-                                self.nodes[*par].active_descendents += 1;
-                                cur = *par;
-                            },
-                            _ => { break; },
-                        }
-                    }
-
+                    
                     //no node is made inactive, so pruning necessary
                 },
             }
@@ -367,5 +333,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         info!( "nodes inactive: {}", self.nodes_inactive.len() );
         info!( "pruned_nodes: {}", self.stat_pruned_nodes );
         info!( "nodes freelist: {}", self.nodes_freelist.len() );
+        info!( "iterations no change: {}/{}", self.stat_iter_no_change, self.param.iterations_bound );
     }
 }
