@@ -38,7 +38,7 @@ fn generate_obstacles( num_obs: u32 ) -> Vec<ObsData> {
         
         (0..num_obs).map( |_| {
 
-            let size = rng.gen_range(0.01, 0.075);
+            let size = rng.gen_range(0.05, 0.075);
             let x = rng.gen_range(0.25, 0.75);
             let y = rng.gen_range(0.25, 0.75);
             let z = 0.;
