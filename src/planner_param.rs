@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::fmt;
 
 use crate::states::States;
 use crate::control::Control;
@@ -33,4 +34,17 @@ pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
 pub struct ParamObstacles <T> where T: States {
     pub obstacles: Vec<RecBox>,    
     pub states_info: PhantomData<T>,
+}
+
+impl<T,C,TObs> fmt::Display for Param <T, C, TObs> where T: States, C: Control, TObs: States  {
+   
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+
+        f.debug_struct("Param")
+            .field("states_init", &format!("{:?}",&self.states_init) )
+            .field("states_config_goal", &format!("{:?}",&self.states_config_goal) )
+            .field("sim_delta", &self.sim_delta )
+            .field("iterations_bound", &self.iterations_bound )
+            .finish()
+    }
 }

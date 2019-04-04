@@ -170,7 +170,9 @@ fn main() {
     // let obs = generate_obstacles::<States3D>();
     let file_obs : & str = matches.value_of("obstacle").unwrap();
     let obs = load_obs_from_file::<States3D>(file_obs);
-    
+
+    info!( "plan info: {}, obstacles: {}", &model_sel, obs.obstacles.len() );
+        
     let obs_copy = obs.clone();
     let mut planner : Box<Planner<States3D,Control1D,States3D> > = 
         Box::new( PlannerBasic::init( model_sel.clone(),

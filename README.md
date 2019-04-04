@@ -39,5 +39,5 @@ Inputs to program
 * required arguments:
   * -f <output_file_path> (eg: cargo run --release --bin gen_obs -- -f obstacles/obs99.txt)
 * optional arguments:
-  * -n <N>: number of obstacles to be generated
+  * -n <N>: number of obstacles to be generated (default: 30)
   * -h: cargo run --release --bin gen_obs -- --h
