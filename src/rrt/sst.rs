@@ -208,13 +208,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                                      monte_carlo_prop_delta );
 
             let config_space_coord = (self.param.project_state_to_config)(state_propagate.clone());
-                
-            let vals = &config_space_coord.get_vals();
-            
-            if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT, &[vals[0] as f64,vals[1] as f64,vals[2] as f64] ) ).unwrap().is_empty() {
-                self.stat_iter_no_change += 1;
-                continue;
-            }
 
             let witness_idx = match self.nn_query.query_nearest_witness( state_propagate.clone(),
                                                                          & self.witnesses, 
@@ -233,6 +226,18 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             match self.witness_representative.get_mut( &witness_idx ) {
                 Some(x) => {
                     if state_propagate_cost < self.nodes[*x].cost {
+
+                        let vals = &config_space_coord.get_vals();
+                        
+                        if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT,
+                                                                                           &[vals[0] as _,
+                                                                                             vals[1] as _,
+                                                                                             vals[2] as _] ) )
+                            .unwrap().is_empty() {
+                            self.stat_iter_no_change += 1;
+                            continue;
+                        }
+                        
                         let node_inactive : usize = *x;
                         self.nodes_active.remove(&node_inactive);
                         self.nodes_inactive.insert(node_inactive);
@@ -298,6 +303,17 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                 },
                 _ => {
                     //no representative found, so just add the propagated state as representative
+
+                    let vals = &config_space_coord.get_vals();
+                    
+                    if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT,
+                                                                                       &[vals[0] as _,
+                                                                                         vals[1] as _,
+                                                                                         vals[2] as _] ) )
+                        .unwrap().is_empty() {
+                        self.stat_iter_no_change += 1;
+                        continue;
+                    }
 
                     //use freelist if possible
                     let idx_node_new = match self.nodes_freelist.pop() {
