@@ -70,6 +70,8 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub stat_iter_no_change: u32,
 
     pub iter_exec: u32,
+
+    pub invert_collision_obs: bool,
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -117,7 +119,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 }
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-    fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize> ) -> Self {
+    fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, invert_collision: bool ) -> Self {
         //todo process obstacles...
         
         Self {
@@ -149,6 +151,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             stat_iter_no_change: 0,
 
             iter_exec: param.iterations_bound,
+
+            invert_collision_obs: invert_collision,
         }
     }
 
@@ -228,14 +232,16 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     if state_propagate_cost < self.nodes[*x].cost {
 
                         let vals = &config_space_coord.get_vals();
+
+                        let no_collision = self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT,
+                                                                                                          &[vals[0] as _,
+                                                                                                            vals[1] as _,
+                                                                                                            vals[2] as _] ) ).unwrap().is_empty();
                         
-                        if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT,
-                                                                                           &[vals[0] as _,
-                                                                                             vals[1] as _,
-                                                                                             vals[2] as _] ) )
-                            .unwrap().is_empty() {
-                            self.stat_iter_no_change += 1;
-                            continue;
+                        if (!no_collision && !self.invert_collision_obs) ||
+                           ( no_collision && self.invert_collision_obs ) {
+                               self.stat_iter_no_change += 1;
+                               continue;
                         }
                         
                         let node_inactive : usize = *x;
@@ -305,14 +311,16 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     //no representative found, so just add the propagated state as representative
 
                     let vals = &config_space_coord.get_vals();
+
+                    let no_collision = self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT,
+                                                                                                 &[vals[0] as _,
+                                                                                                   vals[1] as _,
+                                                                                                   vals[2] as _] ) ).unwrap().is_empty();
                     
-                    if !self.obstacles.query_intersect_single( &AxisAlignedBBox::init( ShapeType::POINT,
-                                                                                       &[vals[0] as _,
-                                                                                         vals[1] as _,
-                                                                                         vals[2] as _] ) )
-                        .unwrap().is_empty() {
-                        self.stat_iter_no_change += 1;
-                        continue;
+                    if (!no_collision && !self.invert_collision_obs) ||
+                       ( no_collision && self.invert_collision_obs ) {
+                           self.stat_iter_no_change += 1;
+                           continue;
                     }
 
                     //use freelist if possible

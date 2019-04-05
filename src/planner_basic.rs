@@ -42,11 +42,13 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     fini: bool,
     // rrt_tree: rrt_base::RRT_Base<TS,TC,TObs>,
     rrt_tree: sst::SST<TS,TC,TObs>,
+    invert_collision_obs: bool,
 }
 
 impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub fn init( param: Param<TS,TC,TObs>,
-                 param_obs: ParamObstacles<TObs> ) -> PlannerBasic<TS,TC,TObs> {
+                 param_obs: ParamObstacles<TObs>,
+                 invert_collision: bool) -> PlannerBasic<TS,TC,TObs> {
 
         // let objs = points.iter()
         //     .enumerate()
@@ -78,7 +80,9 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
             witness_pairs: vec![],
             fini: false,
             rrt_tree: sst::SST::init( &param,
-                                       obs_tree ),
+                                       obs_tree,
+                                       invert_collision ),
+            invert_collision_obs: invert_collision,
         }
     }
 }

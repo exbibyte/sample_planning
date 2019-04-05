@@ -42,11 +42,11 @@ Inputs to program
   * -n \<N>: number of obstacles to be generated (default: 30)
   * -h: cargo run --release --bin gen_obs -- --h
 
-# Using custom maps
+# Using custom maps [TODO]
 * a set of maps that is mainly used for benchmarking purposes obtainable from https://www.movingai.com/benchmarks/grids.html can be used, these are located in the /maps_custom folder
 * character movable space within a map are triangulated for use in the planner as the configuration free space
 * triangulation is done using Triangle software from http://www.cs.cmu.edu/~quake/triangle.html
-* the maps are converted into a format for Triangle to process and output is loadable into our planner, these intermediate files are stored at /maps_custom/<game>/triangulated
+* the maps are converted into a format for Triangle to process and output is loadable into our planner, these intermediate files are stored at /maps_custom/<game>/poly
 
 # Screenshots
 

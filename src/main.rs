@@ -15,6 +15,7 @@ mod states;
 mod dynamics_dubins;
 mod rrt;
 mod control;
+mod map_loader;
 
 use planner_param::{Param,ParamObstacles};
 use planner::Planner;
@@ -138,7 +139,15 @@ fn main() {
         .arg(Arg::with_name("obstacle")
              .short("o")
              .help("obstacle file")
-             .required(true)
+             .default_value("obstacles/obs1.txt")
+             .takes_value(true))
+        .arg(Arg::with_name("custom_map_nodes")
+             .short("n")
+             .help("custom map file")
+             .takes_value(true))
+        .arg(Arg::with_name("custom_map_ele")
+             .short("e")
+             .help("custom map file")
              .takes_value(true))
         .get_matches();
 
@@ -166,18 +175,42 @@ fn main() {
         _ => { panic!("model not found: {}", model_query) },
     };
 
-    //obstructions ---
-    // let obs = generate_obstacles::<States3D>();
-    let file_obs : & str = matches.value_of("obstacle").unwrap();
-    let obs = load_obs_from_file::<States3D>(file_obs);
+    let mut planner : Box<Planner<States3D,Control1D,States3D> >;
+    let mut obs_copy : ParamObstacles<States3D>;
+    
+    match ( matches.value_of("custom_map_nodes"), matches.value_of("custom_map_ele") ) {
+        (Some(path_nodes),Some(path_ele)) => {
+            //load custom map
 
-    info!( "plan info: {}, obstacles: {}", &model_sel, obs.obstacles.len() );
-        
-    let obs_copy = obs.clone();
-    let mut planner : Box<Planner<States3D,Control1D,States3D> > = 
-        Box::new( PlannerBasic::init( model_sel.clone(),
-                                      obs ) );
+            use map_loader;
 
+            let (verts,tris) = map_loader::load_map(path_ele,path_nodes);
+            
+            //todo: convert verts, tris to volumes for collision detection
+            
+            let obs = generate_obstacles::<States3D>();
+            obs_copy = obs.clone();
+            let invert_collision = true;
+            planner = Box::new( PlannerBasic::init( model_sel.clone(),
+                                                    obs,
+                                                    invert_collision ) );
+        },
+        _ => {
+            //obstructions ---
+            // let obs = generate_obstacles::<States3D>();
+            let file_obs : & str = matches.value_of("obstacle").unwrap();
+            let obs = load_obs_from_file::<States3D>(file_obs);
+
+            info!( "plan info: {}, obstacles: {}", &model_sel, obs.obstacles.len() );
+            
+            obs_copy = obs.clone();
+            let invert_collision = false;
+            planner = Box::new( PlannerBasic::init( model_sel.clone(),
+                                                    obs,
+                                                    invert_collision ) );            
+        },
+    }
+    
     //plan ---
     let _iterations = 0;
     let _time_game = 0;
