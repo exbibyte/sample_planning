@@ -1,0 +1,11 @@
+hrt201d
+oth000d
+orz901d
+den005d
+den408d - small
+orz700d - large
+lak307d - small - sphere
+den502d - medium large - rectangular
+den404d - small -rectangular
+den012d - large -rectangular passageways
+arena - small - simple rectangular

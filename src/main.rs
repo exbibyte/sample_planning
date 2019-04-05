@@ -37,6 +37,9 @@ use na::{Vector3, UnitQuaternion, Translation3, Point3, U3};
 use kiss3d::window::Window;
 use kiss3d::light::Light;
 
+extern crate ncollide3d;
+use ncollide3d::procedural::{TriMesh,IndexBuffer};
+
 use rrt::kdtree;
 
 extern crate clap;
@@ -177,6 +180,10 @@ fn main() {
 
     let mut planner : Box<Planner<States3D,Control1D,States3D> >;
     let mut obs_copy : ParamObstacles<States3D>;
+
+    let mut map_custom_mesh = None;
+    let mut map_custom_max_x = 1.;
+    let mut map_custom_max_y = 1.;
     
     match ( matches.value_of("custom_map_nodes"), matches.value_of("custom_map_ele") ) {
         (Some(path_nodes),Some(path_ele)) => {
@@ -184,9 +191,26 @@ fn main() {
 
             use map_loader;
 
-            let (verts,tris) = map_loader::load_map(path_ele,path_nodes);
+            println!("loading map.");
+
+            let (verts,tris,max_x,max_y) = map_loader::load_map(path_ele,path_nodes);
+
+            map_custom_max_x = max_x;
+            map_custom_max_y = max_y;
+
+            println!("loaded map.");
             
-            //todo: convert verts, tris to volumes for collision detection
+            let mesh_points = verts.iter().map(|(x,y)| Point3::new(*x,*y,0.) ).collect::<Vec<_>>();
+            let mesh_tris = tris.iter().map(|x| Point3::new(x[0] as u32,x[1] as u32 ,x[2] as u32) ).collect::<Vec<_>>();
+
+            info!("custom map triangle vert count: {}, triangle count: {}", mesh_points.len(), mesh_tris.len() );
+            
+            let indexbuf = IndexBuffer::Unified( mesh_tris );
+
+            map_custom_mesh = Some(TriMesh::new( mesh_points,
+                                            None,
+                                            None,
+                                            Some(indexbuf) ) );
             
             let obs = generate_obstacles::<States3D>();
             obs_copy = obs.clone();
@@ -211,39 +235,39 @@ fn main() {
         },
     }
     
-    //plan ---
-    let _iterations = 0;
-    let _time_game = 0;
+    // //plan ---
+    // let _iterations = 0;
+    // let _time_game = 0;
 
-    let (end_current_loop, end_all) = planner.plan_iteration( _iterations, _time_game );
+    // let (end_current_loop, end_all) = planner.plan_iteration( _iterations, _time_game );
 
     //render ---
 
     let mut window = Window::new("Sample Planner");
     window.set_light(Light::StickToCamera);
     
-    let coords_points : Vec<Point3<f32>> = planner.get_trajectories().iter()
-        .map(|x| Point3::from(x) )
-        .collect();
+    // let coords_points : Vec<Point3<f32>> = planner.get_trajectories().iter()
+    //     .map(|x| Point3::from(x) )
+    //     .collect();
         
-    let coords : Vec<(Point3<f32>,Point3<f32>)> = planner.get_trajectories_edges().iter()
-        .map(|x| {
-            let a = (x.0).0;
-            let b = (x.1).0;
-            ( Point3::new(a[0],a[1],a[2]),
-              Point3::new(b[0],b[1],b[2]) )
-        })
-        .collect();
+    // let coords : Vec<(Point3<f32>,Point3<f32>)> = planner.get_trajectories_edges().iter()
+    //     .map(|x| {
+    //         let a = (x.0).0;
+    //         let b = (x.1).0;
+    //         ( Point3::new(a[0],a[1],a[2]),
+    //           Point3::new(b[0],b[1],b[2]) )
+    //     })
+    //     .collect();
 
-    //(witness, witness representative) pairs
-    let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = planner.get_witness_pairs().iter()
-        .map(|x| {
-            let a = (x.0).0;
-            let b = (x.1).0;
-            ( Point3::new(a[0],a[1],a[2]),
-              Point3::new(b[0],b[1],b[2]) )
-        })
-        .collect();
+    // //(witness, witness representative) pairs
+    // let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = planner.get_witness_pairs().iter()
+    //     .map(|x| {
+    //         let a = (x.0).0;
+    //         let b = (x.1).0;
+    //         ( Point3::new(a[0],a[1],a[2]),
+    //           Point3::new(b[0],b[1],b[2]) )
+    //     })
+        // .collect();
 
     let mut g1 = window.add_group();
     g1.append_translation(&Translation3::new(0.5, 0.5, 0.0));
@@ -254,51 +278,77 @@ fn main() {
     c.set_points_size(5.0);
     c.set_surface_rendering_activation(false);
 
-    let obs_data : Vec<_> = obs_copy.obstacles.iter()
-        .map(|x| {
-            let l = x._size as f32;
-            ( ( l, l, 0.025),
-              (x._ori._val[0] as f32, x._ori._val[1] as f32, x._ori._val[2] as f32) ) } ).collect();
+    let mut g2 = window.add_group();
+
+    let map_mesh_copy = map_custom_mesh.clone();
+    
+    if map_mesh_copy.is_some(){
+        //scale map size to maximum of 1.0 on longest (x,y) dimensions
+        let scale = if map_custom_max_x > map_custom_max_y {
+            map_custom_max_x }
+        else {
+            map_custom_max_y
+        };
+        
+        g2.add_trimesh( map_mesh_copy.unwrap(), Vector3::new( 1./scale, 1./scale, 1.) );
+    }
+        
+    // let obs_data : Vec<_> = obs_copy.obstacles.iter()
+    //     .map(|x| {
+    //         let l = x._size as f32;
+    //         ( ( l, l, 0.025),
+    //           (x._ori._val[0] as f32, x._ori._val[1] as f32, x._ori._val[2] as f32) ) } ).collect();
+
+    // let meshcoords = vec![ Point3::new(0.,0.,0.),
+    //                        Point3::new(0.5,0.5,0.),
+    //                        Point3::new(0.5,0.,0.), ];
+
+    // let indexbuf = IndexBuffer::Unified( vec![ Point3::new(0, 2, 1) ] );
+    // // Point3::new(0.,0.,0.1),
+    // // Point3::new(0.5,0.5,0.1),
+    // // Point3::new(0.5,0.,0.1)];
     
     while window.render() {
+
+        // window.add_trimesh( mesh2.clone(), Vector3::new( 1., 1., 1.) );
         
-        coords.iter()
-            .for_each(|x| {
-                window.draw_line( &x.0, &x.1, &Point3::new(1.,1.,1.) );
-            } );
+        // coords.iter()
+        //     .for_each(|x| {
+        //         window.draw_line( &x.0, &x.1, &Point3::new(1.,1.,1.) );
+        //     } );
             
-        //domain perimeter
-        window.set_point_size(0.3);
+        // //domain perimeter
+        // window.set_point_size(0.3);
         
-        // coords_points.iter()
-        //     .for_each(|x| { window.draw_point( &x, &Point3::new(0.,0.,1.) ); } );
+        // // coords_points.iter()
+        // //     .for_each(|x| { window.draw_point( &x, &Point3::new(0.,0.,1.) ); } );
 
-        if display_witness_info {
-            coords_witnesses.iter()
-                .for_each(|x| {
-                    window.draw_line( &x.0, &x.1, &Point3::new(1.,0.,0.) );
-                    window.set_point_size(0.45);
-                    window.draw_point( &x.0, &Point3::new(1.,0.,1.) );
-                    window.draw_point( &x.1, &Point3::new(0.,0.,1.) );
-                } );
-        }
+        // if display_witness_info {
+        //     coords_witnesses.iter()
+        //         .for_each(|x| {
+        //             window.draw_line( &x.0, &x.1, &Point3::new(1.,0.,0.) );
+        //             window.set_point_size(0.45);
+        //             window.draw_point( &x.0, &Point3::new(1.,0.,1.) );
+        //             window.draw_point( &x.1, &Point3::new(0.,0.,1.) );
+        //         } );
+        // }
         
-        window.set_point_size(10.);
+        // window.set_point_size(10.);
         
-        //start point
-        window.draw_point( &Point3::from( &model_sel.states_init ),
-                            &Point3::new(0.,1.,0.) );
-        //dest point
-        window.draw_point( &Point3::from( &model_sel.states_config_goal ),
-                            &Point3::new(1.,0.,0.) );
+        // //start point
+        // window.draw_point( &Point3::from( &model_sel.states_init ),
+        //                     &Point3::new(0.,1.,0.) );
+        // //dest point
+        // window.draw_point( &Point3::from( &model_sel.states_config_goal ),
+        //                     &Point3::new(1.,0.,0.) );
 
-        obs_data.iter()
-            .for_each(|x| {
-                let a = x.0;
-                let b = x.1;
-                let mut c = window.add_cube( a.0, a.1, a.2 );
-                c.append_translation( &Translation3::new( b.0, b.1, b.2 ) );
-                c.set_color(0.8, 0.8, 0.);
-            });
+        // obs_data.iter()
+        //     .for_each(|x| {
+        //         let a = x.0;
+        //         let b = x.1;
+        //         let mut c = window.add_cube( a.0, a.1, a.2 );
+        //         c.append_translation( &Translation3::new( b.0, b.1, b.2 ) );
+        //         c.set_color(0.8, 0.8, 0.);
+        //     });
     }
 }

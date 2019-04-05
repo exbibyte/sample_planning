@@ -235,7 +235,28 @@ fn main(){
             }
             centroid.0 /= x.len() as f32;
             centroid.1 /= x.len() as f32;
+
+            for i in 0..x.len(){
+                let y = x[i].0 as i32;
+                let x = x[i].1 as i32;
+                let neighbours = vec![ (y+1, x),
+                                       (y-1, x),
+                                       (y, x+1),
+                                        (y, x-1) ];
+                for nn in neighbours.iter(){
+                    if nn.0 >= 0 && nn.0 < h as i32 &&
+                        nn.1 >= 0 && nn.1 < w as i32 {
+                        if m[nn.0 as usize][nn.1 as usize] == 0 {
+                            centroid.0 = nn.0 as f32;
+                            centroid.1 = nn.1 as f32;
+                            break;
+                        }
+                    }
+                }
+            }
+   
             centroid
+
         }).collect::<Vec<_>>();
 
     let mut total_verts = 0;
