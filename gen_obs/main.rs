@@ -56,7 +56,7 @@ fn main(){
     pretty_env_logger::init_custom_env( "LOG_SETTING" );
 
     //command line ---
-    let matches = App::new("sample_planner")
+    let matches = App::new("gen_obs")
         .version("0.0")
         .author("Yuan Liu")
         .about("obstacle generator")

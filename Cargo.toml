@@ -27,3 +27,7 @@ path = "src/main.rs"
 [[bin]]
 name = "gen_obs"
 path = "gen_obs/main.rs"
+
+[[bin]]
+name = "map2poly"
+path = "map2poly/main.rs"
