@@ -132,7 +132,7 @@ fn main() {
         .arg(Arg::with_name("iterations")
              .short("i")
              .help("iteration upper bound")
-             .default_value("200000")
+             .default_value("300000")
              .takes_value(true))
         .arg(Arg::with_name("model")
              .short("m")
@@ -233,12 +233,11 @@ fn main() {
                 obstacles: ObsVariant::TRIPRISM(triangle_prims),
                 states_info: PhantomData,
             };
+
             obs_copy = obs.clone();
             
-            let invert_collision = true;
             planner = Box::new( PlannerBasic::init( model_sel.clone(),
-                                                    obs,
-                                                    invert_collision ) );
+                                                    obs ) );
         },
         _ => {
             
@@ -248,10 +247,9 @@ fn main() {
             info!( "plan info: {}", &model_sel );
             
             obs_copy = obs.clone();
-            let invert_collision = false;
+            
             planner = Box::new( PlannerBasic::init( model_sel.clone(),
-                                                    obs,
-                                                    invert_collision ) );            
+                                                    obs ) );            
         },
     }
     
@@ -301,7 +299,8 @@ fn main() {
             map_custom_max_y
         };
         
-        g2.add_trimesh( map_custom_mesh.unwrap(), Vector3::new( 1./scale, 1./scale, 1.) );
+        let mut handle = g2.add_trimesh( map_custom_mesh.unwrap(), Vector3::new( 1./scale, 1./scale, 1.) );
+        handle.set_color(0.5, 0.5, 0.5);
     } else {
         
         let mut g1 = window.add_group();

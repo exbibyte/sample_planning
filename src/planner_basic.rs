@@ -41,13 +41,11 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     fini: bool,
     // rrt_tree: rrt_base::RRT_Base<TS,TC,TObs>,
     rrt_tree: sst::SST<TS,TC,TObs>,
-    invert_collision_obs: bool,
 }
 
 impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub fn init( param: Param<TS,TC,TObs>,
-                 param_obs: ParamObstacles<TObs>,
-                 invert_collision: bool) -> PlannerBasic<TS,TC,TObs> {
+                 param_obs: ParamObstacles<TObs> ) -> PlannerBasic<TS,TC,TObs> {
 
         use zpatial::mazth::i_shape::IShape;
         
@@ -82,8 +80,7 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
             rrt_tree: sst::SST::init( &param,
                                        obs_tree, //contains proxy to obstacles
                                        param_obs, //contains actual obstacles
-                                       invert_collision ),
-            invert_collision_obs: invert_collision,
+            ),
         }
     }
 }

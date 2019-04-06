@@ -14,15 +14,17 @@ use rand::Rng;
 ///load model info to the caller
 pub fn load_model() -> Param<States3D, Control1D, States3D> {
     Param {
-        states_init: States3D([0.25, 0.1, 0.]), //default
-        states_config_goal: States3D([0.85,0.85,0.]), //default
+        states_init: States3D([0.68, 0.3, 0.]), //default
+        // states_init: States3D([0.3, 0.1, 0.]), //default
+        // states_config_goal: States3D([0.65,0.85,0.]), //default
+        states_config_goal: States3D([0.4,0.65,0.]), //default
         dynamics: dynamics,
         stop_cond: stop_cond,
         project_state_to_config: project_state_space_to_config_space,
         param_sampler: sampler_parameter_space,
         ss_sampler: sampler_state_space,
         ss_metric: statespace_distance,
-        sim_delta: 0.03f32, //default
+        sim_delta: 0.05f32, //default
         iterations_bound: 300_000, //default, to be override by caller
     }
 }
@@ -68,7 +70,7 @@ pub fn sampler_state_space() -> States3D {
 pub fn stop_cond( system_states: States3D, states_config: States3D, states_config_goal: States3D )-> bool {
     states_config.0.iter()
         .zip( states_config_goal.0.iter() )
-        .all( |x| ((x.0)-(x.1)).abs() < 0.005 )
+        .all( |x| ((x.0)-(x.1)).abs() < 0.002 )
 }
 
 pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {

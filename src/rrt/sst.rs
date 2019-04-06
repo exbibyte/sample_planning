@@ -21,7 +21,8 @@ use zpatial::mazth::{
     i_shape::ShapeType,
     bound::AxisAlignedBBox,
     bound_sphere::BoundSphere,
-    point::Point3
+    point::Point3,
+    line::Line3,
 };
 
 use zpatial::mazth::i_shape::IShape;
@@ -80,8 +81,6 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
     pub iter_exec: u32,
 
-    pub invert_collision_obs: bool,
-
     pub are_obstacles_boxes: bool,
 }
 
@@ -130,7 +129,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 }
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-    fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, obstacles_concrete: ParamObstacles<TObs>, invert_collision: bool ) -> Self {
+    fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, obstacles_concrete: ParamObstacles<TObs> ) -> Self {
         //todo process obstacles...
 
         let box_obstacles = match obstacles_concrete.obstacles {
@@ -154,8 +153,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             witnesses: vec![],
             witness_representative: HashMap::new(),
             edges: HashMap::new(),
-            delta_v: 0.005,
-            delta_s: 0.001,
+            delta_v: 0.008,
+            delta_s: 0.0015,
             
             nodes_active: HashSet::new(),
             nodes_inactive: HashSet::new(),
@@ -171,8 +170,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             stat_iter_no_change: 0,
 
             iter_exec: param.iterations_bound,
-
-            invert_collision_obs: invert_collision,
         }
     }
 
@@ -226,12 +223,14 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             //todo: collision checking with configuration space
             let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + 1;
             let mut state_propagate = self.nodes[idx_state_best_nearest].state.clone();
+
+            let config_space_coord_before = (self.param.project_state_to_config)(state_propagate.clone());
             
             state_propagate = (self.param.dynamics)( state_propagate,
                                                      param_sample.clone(),
                                                      monte_carlo_prop_delta );
 
-            let config_space_coord = (self.param.project_state_to_config)(state_propagate.clone());
+            let config_space_coord_after = (self.param.project_state_to_config)(state_propagate.clone());
 
             let witness_idx = match self.nn_query.query_nearest_witness( state_propagate.clone(),
                                                                          & self.witnesses, 
@@ -251,43 +250,27 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                 Some(x) => {
                     if state_propagate_cost < self.nodes[*x].cost {
 
-                        let vals = &config_space_coord.get_vals();
+                        let v0 = &config_space_coord_before.get_vals();
+                        let v1 = &config_space_coord_after.get_vals();
 
-                        let query_point = Point3::init( &[vals[0] as _,
-                                                          vals[1] as _,
-                                                          vals[2] as _] );
+                        let query_line = Line3::init( &[v0[0] as _, v0[1] as _, v0[2] as _],
+                                                      &[v1[0] as _, v1[1] as _, v1[2] as _] );
+
+                        let candidate_collisions = self.obstacles.query_intersect( &query_line._bound ).unwrap();
                         
-                        let no_collision = if self.are_obstacles_boxes {
-                            
-                            self.obstacles.query_intersect_single( &query_point._bound ).unwrap().is_empty()
-                                
+                        let collision = if candidate_collisions.is_empty() {
+                            false
                         }else{
-
-                            //prelim stage 
-                            let candidate_collisions = self.obstacles.query_intersect( &query_point._bound ).unwrap();
-
-                            if candidate_collisions.is_empty() {
-                                true
-                            } else {
-                                
-                                // println!("checking detailed collision");
-                                
-                                match self.obstacles_actual.obstacles {
-                                    
-                                    ObsVariant::TRIPRISM(ref x) => {
-
-                                        //narrow stage collision test
-                                        let intersected = candidate_collisions.iter().any(|idx| x[*idx].get_intersect( &query_point ).0 );
-                                        
-                                        !intersected
-                                    },
-                                    _ => {panic!("unexpected obstacle variant");},
-                                }
+                            match self.obstacles_actual.obstacles {
+                                ObsVariant::TRIPRISM(ref x) => {
+                                    //narrow stage collision test for tri prisms
+                                    candidate_collisions.iter().any(|idx| x[*idx].get_intersect( &query_line ).0 )
+                                },
+                                _ => { true }, //box same as aabb box
                             }
                         };
                         
-                        if (!no_collision && !self.invert_collision_obs) ||
-                           ( no_collision && self.invert_collision_obs ) {
+                        if collision {
                                self.stat_iter_no_change += 1;
                                continue;
                         }
@@ -358,45 +341,29 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                 _ => {
                     //no representative found, so just add the propagated state as representative
 
-                    let vals = &config_space_coord.get_vals();
+                    let v0 = &config_space_coord_before.get_vals();
+                    let v1 = &config_space_coord_after.get_vals();
 
-                    let query_point = Point3::init( &[vals[0] as _,
-                                                      vals[1] as _,
-                                                      vals[2] as _] );
+                    let query_line = Line3::init( &[v0[0] as _, v0[1] as _, v0[2] as _],
+                                                    &[v1[0] as _, v1[1] as _, v1[2] as _] );
+
+                    let candidate_collisions = self.obstacles.query_intersect( &query_line._bound ).unwrap();
                     
-                    let no_collision = if self.are_obstacles_boxes {
-                        
-                        self.obstacles.query_intersect_single( &query_point._bound ).unwrap().is_empty()
-                            
+                    let collision = if candidate_collisions.is_empty() {
+                        false
                     }else{
-
-                        //prelim stage 
-                        let candidate_collisions = self.obstacles.query_intersect( &query_point._bound ).unwrap();
-
-                        if candidate_collisions.is_empty() {
-                            true
-                        } else {
-
-                            // println!("checking detailed collision 2");
-                            
-                            match self.obstacles_actual.obstacles {
-                                
-                                ObsVariant::TRIPRISM(ref x) => {
-
-                                    //narrow stage collision test
-                                    let intersected = candidate_collisions.iter().any(|idx| x[*idx].get_intersect( &query_point ).0 );
-                                    
-                                    !intersected
-                                },
-                                _ => {panic!("unexpected obstacle variant");},
-                            }
+                        match self.obstacles_actual.obstacles {
+                            ObsVariant::TRIPRISM(ref x) => {
+                                //narrow stage collision test for tri prisms
+                                candidate_collisions.iter().any(|idx| x[*idx].get_intersect( &query_line ).0 )
+                            },
+                            _ => { true }, //box same as aabb box
                         }
                     };
-
-                    if (!no_collision && !self.invert_collision_obs) ||
-                       ( no_collision && self.invert_collision_obs ) {
-                           self.stat_iter_no_change += 1;
-                           continue;
+                    
+                    if collision {
+                        self.stat_iter_no_change += 1;
+                        continue;
                     }
                     
                     //use freelist if possible
