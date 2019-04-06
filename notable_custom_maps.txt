@@ -7,5 +7,5 @@ orz700d - large
 lak307d - small - sphere
 den502d - medium large - rectangular
 den404d - small -rectangular
-den012d - large -rectangular passageways
+den012d - large -rectangular passageways start:(0.25,0.1), goal: (0.85,0.85)
 arena - small - simple rectangular

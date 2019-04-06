@@ -6,8 +6,8 @@ edition = "2018"
 
 [dependencies]
 # e2r = "0.10.0"
-mazth = "0.2"
-zpatial = "0.2.4"
+mazth = "0.4.1"
+zpatial = "0.3.1"
 chrono = "0.4"
 # nom = "*"
 log = "0.4.6"

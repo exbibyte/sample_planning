@@ -21,6 +21,7 @@ use crate::states::*;
 use zpatial::implement::bvh_median::Bvh;
 use zpatial::interface::i_spatial_accel::*;
 
+use zpatial::mazth::{rbox::RecBox,triprism::TriPrism};
 
 use zpatial::mazth::{
     i_bound::{ IBound, BoundType },
@@ -30,12 +31,10 @@ use zpatial::mazth::{
 };
 
 pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-    // marker_states: PhantomData<TS>,
-    // points: Vec<[f32;3]>,
+
     param: Param <TS,TC,TObs>,
     param_obstacle: ParamObstacles<TObs>,
     states_cur: Option<TS>,
-    // obstacles: Bvh<usize>,
     trajectory: Vec<TObs>,
     trajectory_edge: Vec<(TObs,TObs)>,
     witness_pairs: Vec<(TObs,TObs)>,
@@ -50,37 +49,39 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
                  param_obs: ParamObstacles<TObs>,
                  invert_collision: bool) -> PlannerBasic<TS,TC,TObs> {
 
-        // let objs = points.iter()
-        //     .enumerate()
-        //     .map(|x| (x.0, AxisAlignedBBox::init( ShapeType::SPHERE, &[x.1[0]as f64, x.1[1]as f64, x.1[2]as f64, 0.01f64 ] ) ) )
-        //     .collect::<Vec<_>>();
-
-        // let bound_objs = objs.iter().map(|x| (x.0, &x.1 as &IBound ) ).collect::<Vec<_>>();
-
         use zpatial::mazth::i_shape::IShape;
         
         let mut obs_tree = Bvh::init(10);
-        
-        let bounds = param_obs.obstacles.iter()
-            .enumerate()
-            .map(|x| (x.0, x.1.get_bound()) )
-            .collect::<Vec<_>>();
-        
+
+        //get bounds as [(idx,aabb_bound)]
+        let bounds = match param_obs.obstacles {
+            ObsVariant::RBOX(ref x) => {
+                x.iter()
+                    .enumerate()
+                    .map(|x| (x.0, x.1.get_bound()) )
+                    .collect::<Vec<_>>()
+            },
+            ObsVariant::TRIPRISM(ref x) => {
+                x.iter()
+                    .enumerate()
+                    .map(|x| (x.0, x.1.get_bound()) )
+                    .collect::<Vec<_>>()
+            },
+        };
+
         obs_tree.build_all( &bounds[..] ).is_ok();
         
         Self{
-            // marker_states: PhantomData,
-            // points: vec![],
             param: param.clone(),
             param_obstacle: param_obs.clone(),
             states_cur: None,
-            // obstacles: obs_tree.clone(),
             trajectory: vec![],
             trajectory_edge: vec![],
             witness_pairs: vec![],
             fini: false,
             rrt_tree: sst::SST::init( &param,
-                                       obs_tree,
+                                       obs_tree, //contains proxy to obstacles
+                                       param_obs, //contains actual obstacles
                                        invert_collision ),
             invert_collision_obs: invert_collision,
         }

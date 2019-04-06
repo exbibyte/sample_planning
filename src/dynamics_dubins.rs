@@ -14,7 +14,7 @@ use rand::Rng;
 ///load model info to the caller
 pub fn load_model() -> Param<States3D, Control1D, States3D> {
     Param {
-        states_init: States3D([0.15, 0.15, 0.]), //default
+        states_init: States3D([0.25, 0.1, 0.]), //default
         states_config_goal: States3D([0.85,0.85,0.]), //default
         dynamics: dynamics,
         stop_cond: stop_cond,
@@ -22,8 +22,8 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> {
         param_sampler: sampler_parameter_space,
         ss_sampler: sampler_state_space,
         ss_metric: statespace_distance,
-        sim_delta: 0.06f32, //default
-        iterations_bound: 150_000, //default, to be override by caller
+        sim_delta: 0.03f32, //default
+        iterations_bound: 300_000, //default, to be override by caller
     }
 }
 

@@ -70,6 +70,15 @@ pub fn load_map( path_ele: & str, path_nodes: &str ) -> (Vec<(f32,f32)>, Vec<[us
     //shift (max_x,max_y) by -(min_x,min_y)
     max_x -= min_x;
     max_y -= min_y;
+
+    //scale coordinates so that longest dimension is 1.0
+
+    let scale = if max_y > max_x { max_y } else { max_x };
+
+    nodes.iter_mut().for_each(|x| { x.0 /= scale; x.1 /= scale; } );
+
+    max_x /= scale;
+    max_y /= scale;    
     
     let mut num_tris = 0;
 

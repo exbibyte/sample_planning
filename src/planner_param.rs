@@ -7,7 +7,7 @@ use crate::control::Control;
 extern crate mazth;
 
 use zpatial::mazth::i_shape::IShape;
-use zpatial::mazth::rbox::RecBox;
+use zpatial::mazth::{rbox::RecBox,triprism::TriPrism};
 
 pub enum StopCondition {
     Iterations(i32),
@@ -31,8 +31,14 @@ pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
 }
 
 #[derive(Clone,Debug)]
+pub enum ObsVariant {
+    RBOX(Vec<RecBox>),
+    TRIPRISM(Vec<TriPrism>),
+}
+
+#[derive(Clone,Debug)]
 pub struct ParamObstacles <T> where T: States {
-    pub obstacles: Vec<RecBox>,    
+    pub obstacles: ObsVariant,
     pub states_info: PhantomData<T>,
 }
 

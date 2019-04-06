@@ -66,7 +66,7 @@ impl <TS,TC,TObs> RRT_Base<TS,TC,TObs> where TS: States, TC: Control, TObs: Stat
 }
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for RRT_Base<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-    fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, invert_collision: bool ) -> Self {
+    fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, obstacles_concrete: ParamObstacles<TObs>, invert_collision: bool ) -> Self {
         //todo process obstacles...
         
         Self {
