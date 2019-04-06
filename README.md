@@ -61,7 +61,7 @@ Inputs to program
    <img src="images/screenshot0.png" alt="drawing" width="500" height="500"/>
 </p>
 
-# A map from Dragon Age and its post-processed version in planner
+## A map from Dragon Age and its post-processed version in planner
 <p align="center">
    <img src="images/custom_map0_original.png" alt="drawing" width="500" height="500"/>
    <img src="images/custom_map0_processed.png" alt="drawing" width="500" height="500"/>	
