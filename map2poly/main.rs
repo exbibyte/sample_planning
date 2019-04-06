@@ -48,6 +48,8 @@ fn main(){
     let mut idx_h = 0;
 
     let mut m_orig : Vec<Vec<u8>>= vec![];
+
+    let mut free_space = HashSet::new();
     
     for(n,line) in b.lines().enumerate() {
         if n == 0 { continue; } 
@@ -90,6 +92,10 @@ fn main(){
     for i in 0..h as i32 {
         for j in 0..w as i32 {
             if m_orig[i as usize][j as usize] == 1 {
+
+                if i > 0 && i < h as i32 -1 && j > 0 && j < w as i32 -1 {
+                    free_space.insert((i,j));
+                }
                 
                 let mut neighbour = vec![ (i-1,j),
                                           (i+1,j),
@@ -110,24 +116,13 @@ fn main(){
         }
     }
     
-    // for i in 0..h {
-    //     for j in 0..w {
-    //         if m[i][j] == 1 {
-    //             print!(" " );
-    //         }else{
-    //             print!("0");
-    //         }
-    //     }
-    //     println!();
-    // }
-    
     //get perimeter of free space
     let mut candidates = HashSet::new();
     
     for i in 0..h as i32 {
         for j in 0..w as i32 {
             if m[i as usize][j as usize] == 1 {
-
+                
                 let mut neighbour = vec![ (i-1,j),
                                           (i+1,j),
                                           (i,j-1),
@@ -153,17 +148,6 @@ fn main(){
     let mut m_out = vec![ vec![ 0; w ]; h ];
     
     candidates.iter().for_each(|(y,x)| { m_out[*y as usize][*x as usize] = 1; } );
-    
-    // for i in 0..h {
-    //     for j in 0..w {
-    //         if m_out[i][j] == 1 {
-    //             print!(" " );
-    //         }else{
-    //             print!("0");
-    //         }
-    //     }
-    //     println!();
-    // }
     
     let mut used = HashSet::new();
 
@@ -225,65 +209,25 @@ fn main(){
     
     assert!( perimeters.len() > 0 );
 
-    //get points in holes
-    let holes = perimeters.iter().skip(1)
-        .map(|x| {
-            let mut centroid = (0.,0.);
-            for i in x.iter() {
-                centroid.0 += i.0 as f32;
-                centroid.1 += i.1 as f32;
-            }
-            centroid.0 /= x.len() as f32;
-            centroid.1 /= x.len() as f32;
+    //get hole points
+    let holes = free_space.iter().collect::<Vec<_>>();
 
-            for i in 0..x.len(){
-                let y = x[i].0 as i32;
-                let x = x[i].1 as i32;
-                let neighbours = vec![ (y+1, x),
-                                       (y-1, x),
-                                       (y, x+1),
-                                        (y, x-1) ];
-                for nn in neighbours.iter(){
-                    if nn.0 >= 0 && nn.0 < h as i32 &&
-                        nn.1 >= 0 && nn.1 < w as i32 {
-                        if m[nn.0 as usize][nn.1 as usize] == 0 {
-                            centroid.0 = nn.0 as f32;
-                            centroid.1 = nn.1 as f32;
-                            break;
-                        }
-                    }
-                }
-            }
-   
-            centroid
-
-        }).collect::<Vec<_>>();
-
+    //add an out rectangle to contain the interior of the map
+    let mut outer_most = vec![ (-2i32, -2i32),
+                                 (h as i32+2, -2i32),
+                                 (h as i32+2, w as i32+2),
+                                 (-2i32, w as i32 +2), ];
+    
+    perimeters.push( outer_most );
+    
     let mut total_verts = 0;
     let mut total_segments = 0;
     
     for i in perimeters.iter(){
-            
         total_segments += i.len();
         total_verts += i.len();
-        
-        // for j in i.iter(){
-        //     let (y,x) = j;
-        //     m_out2[*y as usize][*x as usize] = 1;
-        // }
     }
-    
-    // for i in 0..h {
-    //     for j in 0..w {
-    //         if m_out2[i][j] == 1 {
-    //             print!(" " );
-    //         }else{
-    //             print!("0");
-    //         }
-    //     }
-    //     println!();
-    // }
-    
+
     use std::io::Write;
 
     let mut out = File::create( f_out ).expect("file creation");
