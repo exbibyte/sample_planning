@@ -11,6 +11,7 @@ use crate::rrt::rrt::RRT;
 use crate::states::States;
 use crate::control::Control;
 use crate::planner_param::{Param,ParamObstacles};
+use crate::moprim::{MoPrim,Motion};
 
 use super::nn_naive::NN_Naive;
 
@@ -82,6 +83,12 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub iter_exec: u32,
 
     pub are_obstacles_boxes: bool,
+
+    ///motion primitive
+    #[cfg(feature="motion_primitives")]
+    pub mo_prim: MoPrim<TS,TC,TObs>,
+    #[cfg(feature="motion_primitives")]
+    pub stat_motion_prim_invoked: u32,
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -153,8 +160,10 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             witnesses: vec![],
             witness_representative: HashMap::new(),
             edges: HashMap::new(),
-            delta_v: 0.008,
-            delta_s: 0.0015,
+            // delta_v: 0.008,
+            // delta_s: 0.0015,
+            delta_v: 0.0075,
+            delta_s: 0.002,
             
             nodes_active: HashSet::new(),
             nodes_inactive: HashSet::new(),
@@ -170,6 +179,14 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             stat_iter_no_change: 0,
 
             iter_exec: param.iterations_bound,
+
+            #[cfg(feature="motion_primitives")]
+            mo_prim: MoPrim::init( param.ss_metric,
+                                   param.motion_primitive_xform.expect("motion primitive transform"),
+                                   param.motion_primitive_xform_inv.expect("motion primitive transform inverse") ),
+            
+            #[cfg(feature="motion_primitives")]
+            stat_motion_prim_invoked: 0,
         }
     }
 
@@ -197,7 +214,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         
         self.reset();
         
-        for i in 0..self.param.iterations_bound {
+        'l_outer: for i in 0..self.param.iterations_bound {
             // println!("iteration: {}", i );
             let ss_sample = (self.param.ss_sampler)(); //sampler for state space
 
@@ -214,23 +231,114 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             //propagation with random delta within range of specified upper bound
             let mut rng = rand::thread_rng();
-            let monte_carlo_prop_delta = rng.gen_range(0., 1.) * self.param.sim_delta;
+            let mut monte_carlo_prop_delta = rng.gen_range(0., 1.) * self.param.sim_delta;
 
             //sampler for control space
-            let param_sample = (self.param.param_sampler)( monte_carlo_prop_delta );
+            let mut param_sample = (self.param.param_sampler)( monte_carlo_prop_delta );
 
             //propagate/simulate state dynamics
             //todo: collision checking with configuration space
             let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + 1;
-            let mut state_propagate = self.nodes[idx_state_best_nearest].state.clone();
-
-            let config_space_coord_before = (self.param.project_state_to_config)(state_propagate.clone());
+            let state_start = self.nodes[idx_state_best_nearest].state.clone();
             
-            state_propagate = (self.param.dynamics)( state_propagate,
+            let config_space_coord_before = (self.param.project_state_to_config)(state_start.clone());
+
+            #[cfg(feature="motion_primitives")]
+            {
+                const prob_mo_prim : f32 = 0.5;
+                let rand_prob = rng.gen_range(0., 1.);
+
+                if rand_prob > 0.1 {
+                    
+                    let d = (self.param.cs_metric)( config_space_coord_before.clone(), self.param.states_config_goal.clone() );
+
+                    //todo: determine neighbourhood size
+                    if d < 0.3 {
+                        //try using motion primitive to propagate towards goal
+                        
+                        let q_query_mo_prim = (self.param.ss_goal_gen)(); //get a possible state space value that fulfills goal
+
+                        let cost_threshold :f32 = 0.2; // todo: determine this
+                        
+                        let motions : Vec<Motion<_,_>> = self.mo_prim.query_motion( state_start.clone(),
+                                                                                      q_query_mo_prim,
+                                                                                      cost_threshold );
+                        
+                        
+                        let v0 = &config_space_coord_before.get_vals();
+
+                        use std::cmp::Ordering;
+
+                        //test for obstable collision for candidate motions
+                        
+                        let sel_motion = motions.iter().filter(|m|{
+                            let control = m.u.clone();
+                            let time_dur = m.t.clone();
+                            
+                            let propagate_motion = (self.param.dynamics)( state_start.clone(),
+                                                                          control,
+                                                                          time_dur );
+                            
+                            let end_point = (self.param.project_state_to_config)(propagate_motion.clone());
+                            let end_point_vals = end_point.get_vals();
+                            
+                            let query_line = Line3::init( &[v0[0] as _, v0[1] as _, v0[2] as _],
+                                                            &[end_point_vals[0] as _, end_point_vals[1] as _, end_point_vals[2] as _] );
+
+                            let candidate_collisions = self.obstacles.query_intersect( &query_line._bound ).unwrap();
+                            
+                            let collision = if candidate_collisions.is_empty() {
+                                false
+                            }else{
+                                match self.obstacles_actual.obstacles {
+                                    ObsVariant::TRIPRISM(ref x) => {
+                                        //narrow stage collision test for tri prisms
+                                        candidate_collisions.iter().any(|idx| x[*idx].get_intersect( &query_line ).0 )
+                                    },
+                                    _ => { true }, //box same as aabb box
+                                }
+                            };
+
+                            if collision {
+                                false
+                            } else {
+                                true
+                            }
+                            //select feasible and efficient motion with respect to cost
+                        }).min_by(|a,b| a.c.partial_cmp( &b.c ).unwrap_or(Ordering::Equal) );
+
+                        match sel_motion {
+                            Some(Motion{u,t,..}) => {
+                                //replace monte carlo propagation time and random control sample with the one from motion primitive
+                                monte_carlo_prop_delta = t.clone();
+                                param_sample = u.clone();
+                                self.stat_motion_prim_invoked += 1;
+                                //continue propagation process as below
+                            },
+                            _ => {},
+                        }
+                    }   
+                }
+            }
+            
+            let state_propagate = (self.param.dynamics)( state_start.clone(),
                                                      param_sample.clone(),
                                                      monte_carlo_prop_delta );
 
             let config_space_coord_after = (self.param.project_state_to_config)(state_propagate.clone());
+
+            #[cfg(feature="motion_primitives")]
+            {
+                let d = (self.param.cs_metric)( config_space_coord_before.clone(), config_space_coord_after.clone() );
+                if d < 0.3 {
+                    //no matter what obstructions are out there, we can still record the motion
+                    self.mo_prim.add_motion( state_start,
+                                             state_propagate.clone(),
+                                             param_sample.clone(),
+                                             monte_carlo_prop_delta,
+                                             monte_carlo_prop_delta );
+                }
+            }
 
             let witness_idx = match self.nn_query.query_nearest_witness( state_propagate.clone(),
                                                                          & self.witnesses, 
@@ -419,5 +527,11 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         info!( "pruned_nodes: {}", self.stat_pruned_nodes );
         info!( "nodes freelist: {}", self.nodes_freelist.len() );
         info!( "iterations no change: {}/{}", self.stat_iter_no_change, self.iter_exec );
+        
+        #[cfg(feature="motion_primitives")]
+        {
+            self.mo_prim.print_stats();
+            info!( "stat_motion_prim_invoked: {}", self.stat_motion_prim_invoked );
+        }
     }
 }

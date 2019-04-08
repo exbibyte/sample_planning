@@ -21,6 +21,9 @@ clap = "2.32"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+[features]
+motion_primitives = []
+
 [[bin]]
 name = "planner"
 path = "src/main.rs"

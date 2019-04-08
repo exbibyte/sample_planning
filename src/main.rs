@@ -16,6 +16,7 @@ mod dynamics_dubins;
 mod rrt;
 mod control;
 mod map_loader;
+mod moprim;
 
 use planner_param::{Param,ParamObstacles,ObsVariant};
 use planner::Planner;
