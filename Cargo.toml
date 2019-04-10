@@ -23,6 +23,7 @@ serde_json = "1.0"
 
 [features]
 motion_primitives = []
+runge_kutta = []
 
 [[bin]]
 name = "planner"

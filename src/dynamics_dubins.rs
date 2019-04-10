@@ -31,7 +31,7 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and 
         ss_sampler: sampler_state_space,
         ss_metric: statespace_distance,
         // sim_delta: 0.05f32, //default
-        sim_delta: 0.05f32, //default
+        sim_delta: 0.025f32, //default
         iterations_bound: 300_000, //default, to be override by caller
 
         //motion primitive transform functions
@@ -42,16 +42,75 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and 
     }
 }
 
-pub fn dynamics( states: States3D, control: Control1D, delta: f32 )-> States3D {
+///calculate change
+fn dyn_change( states: States3D, control: Control1D, delta: f32 )-> States3D {
     
     use std::f32::consts::PI;
     
     let x_dot = states.0[2].cos();
     let y_dot = states.0[2].sin();
     let theta_dot = control.0[0];
-    States3D( [ states.0[0] + x_dot * delta,
-                states.0[1] + y_dot * delta,
-                ( (states.0[2] + theta_dot * delta ) + 2.*PI ) % (2.*PI) ] )
+    States3D( [ x_dot,
+                y_dot,
+                theta_dot ] )
+}
+
+///4th order runge-kutta
+fn runge_kutta_4( states: States3D, control: Control1D, delta: f32 )-> States3D {
+
+    use std::f32::consts::PI;
+    
+    let k1 = {
+        
+        let mut temp = dyn_change( states.clone(), control.clone(), 0.  );
+        temp * delta
+    };
+    
+    let k2 = {
+        
+        let mut k1_copy = k1.clone() * (1./2.);
+        
+        let mut temp = dyn_change( states.clone() + k1_copy, control.clone(), delta/2. );
+        temp * delta
+    };
+
+    let k3 = {
+        
+        let mut k2_copy = k2.clone() * (1./2.);
+
+        let mut temp = dyn_change( states.clone() + k2_copy, control.clone(), delta/2. );
+        temp * delta
+    };
+
+    let k4 = {
+        
+        let mut temp = dyn_change( states.clone() + k3, control.clone(), delta );
+        temp * delta
+    };
+    
+    States3D( [ states.0[0] + 1./6.*( k1.0[0] + 2.*k2.0[0] + 2.*k3.0[0] + k4.0[0] ),
+                states.0[1] + 1./6.*( k1.0[1] + 2.*k2.0[1] + 2.*k3.0[1] + k4.0[1] ),
+                ( states.0[2] + ( 1./6.*( k1.0[2] + 2.*k2.0[2] + 2.*k3.0[2] + k4.0[2] ) ) + 2.*PI ) % ( 2.*PI ) ] )
+}
+
+pub fn dynamics( states: States3D, control: Control1D, delta: f32 )-> States3D {
+    
+    use std::f32::consts::PI;
+
+    #[cfg(not(feature="runge_kutta"))]
+    {
+        // 1st order
+        let temp = dyn_change( states, control, delta ) * delta;
+        
+        States3D( [ states.0[0] + temp.0[0],
+                    states.0[1] + temp.0[1],
+                    ( (states.0[2] + temp.0[2] ) + 2.*PI ) % (2.*PI) ] )
+    }
+    #[cfg(feature="runge_kutta")]
+    {
+        //4th order
+        runge_kutta_4( states, control, delta )
+    }
 }
 
 ///project x and y
@@ -63,9 +122,15 @@ pub fn sampler_parameter_space( delta: f32 ) -> Control1D {
     
     use std::f32::consts::PI;
     
-    let mut rng = rand::thread_rng();
+    // let mut rng = rand::thread_rng();
+
+    use rand::prelude::*;
+    use rand::distributions::Standard;
+
+    let val: f32 = SmallRng::from_entropy().sample(Standard);
     
-    Control1D( [ (rng.gen_range(-1., 1.)*20./180.* PI )/delta ] )
+    // Control1D( [ (rng.gen_range(-1., 1.)*20./180.* PI )/delta ] )
+    Control1D( [ ( 2. * (val-0.5) * 20./180.* PI )/delta ] )
 }
 
 pub fn sampler_state_space() -> States3D {
@@ -83,8 +148,9 @@ pub fn sampler_state_space() -> States3D {
 pub fn stop_cond( system_states: States3D, states_config: States3D, states_config_goal: States3D )-> bool {
     states_config.0.iter()
         .zip( states_config_goal.0.iter() )
-        // .all( |x| ((x.0)-(x.1)).abs() < 0.002 )
-        .all( |x| ((x.0)-(x.1)).abs() < 0.01 )
+    // .all( |x| ((x.0)-(x.1)).abs() < 0.002 )
+    .all( |x| ((x.0)-(x.1)).abs() < 0.01 )
+    // config_space_distance(states_config, states_config_goal) < 0.001
 }
 
 ///estimate of closeness to goal condition in configuration space
@@ -177,7 +243,9 @@ pub fn motion_primitive_xform( q_start: States3D, q_end: States3D ) -> States3D 
     
     let qq = m_rot.mul_mat4x1( & m_translate.mul_mat4x1( &q ).unwrap() ).unwrap();
 
-    States3D( [ qq[0], qq[1], qq[2] ] )
+    use std::f32::consts::PI;
+    
+    States3D( [ qq[0], qq[1], ( qq[2] + 2. * PI ) % ( 2. * PI ) ] )
 }
 
 /// map ``qq_end`` from motion primitive lookup space back to the original space,
@@ -232,7 +300,9 @@ pub fn motion_primitive_xform_inv( q_start: States3D, qq_end: States3D ) -> Stat
     //translate( rot( q ) )
     let q = m_translate.mul_mat4x1( & m_rot.mul_mat4x1( &q ).unwrap() ).unwrap();
 
-    States3D( [ q[0], q[1], q[2] ] )
+    use std::f32::consts::PI;
+    
+    States3D( [ q[0], q[1], ( q[2] + 2. * PI ) % ( 2. * PI ) ] )
 }
 
 #[test]
