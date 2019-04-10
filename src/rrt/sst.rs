@@ -47,7 +47,11 @@ pub struct Node<TS> {
 }
 
 pub struct Edge <TC> {
+    
     pub control: TC,
+
+    ///additional annotation for differentiating propagation type
+    pub kind: u32, //currently: 0: sst monte carlo propagation, 1: motion primitive propagation
 }
 
 pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -111,7 +115,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             .collect()
     }
     
-    pub fn get_trajectory_edges_config_space( & self ) -> Vec<(TObs,TObs)> {
+    pub fn get_trajectory_edges_config_space( & self ) -> Vec<((TObs,TObs),u32)> {
         
         self.edges.iter()
             .filter(|x| {
@@ -124,8 +128,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                 let id_b = (x.0).1;
                 let state_a = &self.nodes[id_a].state;
                 let state_b = &self.nodes[id_b].state;
-                ( (self.param.project_state_to_config)(state_a.clone()),
-                  (self.param.project_state_to_config)(state_b.clone()) )
+                ( ( (self.param.project_state_to_config)(state_a.clone()),
+                    (self.param.project_state_to_config)(state_b.clone()) ), (x.1).kind )
             })
             .collect()
     }
@@ -162,8 +166,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             edges: HashMap::new(),
             // delta_v: 0.008,
             // delta_s: 0.0015,
-            delta_v: 0.0075,
-            delta_s: 0.002,
+            delta_v: 0.01,
+            delta_s: 0.0025,
             
             nodes_active: HashSet::new(),
             nodes_inactive: HashSet::new(),
@@ -230,8 +234,16 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             // dbg!(idx_state_best_nearest);
 
             //propagation with random delta within range of specified upper bound
-            let mut rng = rand::thread_rng();
-            let mut monte_carlo_prop_delta = rng.gen_range(0., 1.) * self.param.sim_delta;
+
+            use rand::prelude::*;
+            use rand::distributions::Standard;
+
+            let val: f32 = SmallRng::from_entropy().sample(Standard);
+            
+            // let mut rng = rand::thread_rng();
+            // let mut monte_carlo_prop_delta = rng.gen_range(0., 1.) * self.param.sim_delta;
+
+            let mut monte_carlo_prop_delta = val * self.param.sim_delta;
 
             //sampler for control space
             let mut param_sample = (self.param.param_sampler)( monte_carlo_prop_delta );
@@ -243,17 +255,22 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             
             let config_space_coord_before = (self.param.project_state_to_config)(state_start.clone());
 
+            let mut is_using_motion_prim = false;
+            
             #[cfg(feature="motion_primitives")]
             {
                 const prob_mo_prim : f32 = 0.5;
-                let rand_prob = rng.gen_range(0., 1.);
 
-                if rand_prob > 0.1 {
+                let rand_prob : f32 = SmallRng::from_entropy().sample(Standard);
+                
+                // let rand_prob = rng.gen_range(0., 1.);
+
+                if rand_prob > 0.0 {
                     
                     let d = (self.param.cs_metric)( config_space_coord_before.clone(), self.param.states_config_goal.clone() );
 
                     //todo: determine neighbourhood size
-                    if d < 0.3 {
+                    if d < 0.7 {
                         //try using motion primitive to propagate towards goal
                         
                         let q_query_mo_prim = (self.param.ss_goal_gen)(); //get a possible state space value that fulfills goal
@@ -285,6 +302,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                             let query_line = Line3::init( &[v0[0] as _, v0[1] as _, v0[2] as _],
                                                             &[end_point_vals[0] as _, end_point_vals[1] as _, end_point_vals[2] as _] );
 
+                            // println!("{:?}, {:?}", query_line, self.param.states_config_goal );
+                            
                             let candidate_collisions = self.obstacles.query_intersect( &query_line._bound ).unwrap();
                             
                             let collision = if candidate_collisions.is_empty() {
@@ -299,9 +318,13 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                 }
                             };
 
-                            if collision {
+                            let d_diff = (self.param.cs_metric)( end_point, self.param.states_config_goal.clone() );
+                            
+                            if collision || d_diff > 0.7  
+                            {
                                 false
                             } else {
+                                // info!("found candidate");
                                 true
                             }
                             //select feasible and efficient motion with respect to cost
@@ -313,6 +336,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                 monte_carlo_prop_delta = t.clone();
                                 param_sample = u.clone();
                                 self.stat_motion_prim_invoked += 1;
+                                is_using_motion_prim = true;
                                 //continue propagation process as below
                             },
                             _ => {},
@@ -329,15 +353,18 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             #[cfg(feature="motion_primitives")]
             {
-                let d = (self.param.cs_metric)( config_space_coord_before.clone(), config_space_coord_after.clone() );
-                if d < 0.3 {
-                    //no matter what obstructions are out there, we can still record the motion
-                    self.mo_prim.add_motion( state_start,
-                                             state_propagate.clone(),
-                                             param_sample.clone(),
-                                             monte_carlo_prop_delta,
-                                             monte_carlo_prop_delta );
-                }
+                // let rand_prob = rng.gen_range(0., 1.);
+                // if rand_prob > 0.7 {
+                    let d = (self.param.cs_metric)( config_space_coord_before.clone(), config_space_coord_after.clone() );
+                    if d < 0.7 {
+                        //no matter what obstructions are out there, we can still record the motion
+                        self.mo_prim.add_motion( state_start,
+                                                 state_propagate.clone(),
+                                                 param_sample.clone(),
+                                                 monte_carlo_prop_delta,
+                                                 monte_carlo_prop_delta );
+                    }
+                // }
             }
 
             let witness_idx = match self.nn_query.query_nearest_witness( state_propagate.clone(),
@@ -414,7 +441,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                        
                         self.link_parent.insert( idx_node_new, idx_state_best_nearest );
 
-                        self.edges.insert( (idx_state_best_nearest, idx_node_new), Edge { control: param_sample } );
+                        self.edges.insert( (idx_state_best_nearest, idx_node_new), Edge { control: param_sample,
+                                                                                          kind: if is_using_motion_prim { 1 } else { 0 } } );
                         
                         // //remove leaf nodes and branches from propagation tree if possible
                         let mut node_prune = node_inactive;
@@ -500,14 +528,19 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
                     self.link_parent.insert( idx_node_new, idx_state_best_nearest );
 
-                    self.edges.insert( (idx_state_best_nearest, idx_node_new), Edge { control: param_sample } );
+                    self.edges.insert( (idx_state_best_nearest, idx_node_new), Edge { control: param_sample,
+                                                                                      kind: if is_using_motion_prim { 1 } else { 0 } } );
                     
                     //no node is made inactive, so pruning necessary
                 },
             }
             
             if self.reached_goal( state_propagate ) {
-                info!("found a path to goal on iteration: {}", i );
+
+                let d_goal = (self.param.cs_metric)( config_space_coord_after.clone(), self.param.states_config_goal.clone() );
+                
+                info!("found a path to goal on iteration: {}, diff: {}", i, d_goal );
+                
                 self.iter_exec = i;
                 break;
             }

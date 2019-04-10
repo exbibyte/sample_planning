@@ -8,7 +8,7 @@ pub trait Planner <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     // fn get_trajectories_past( & self ) -> &[[f32;3]];
     // fn get_trajectories_optimal( & self ) -> &[[f32;3]];
     fn get_trajectories( & self ) -> &[TObs];
-    fn get_trajectories_edges( & self ) -> &[(TObs,TObs)];
+    fn get_trajectories_edges( & self ) -> &[((TObs,TObs),u32)];
     fn get_param( & self ) -> Param<TS,TC,TObs>;
     fn get_states_current( & self ) -> Option<TS>;
     fn get_witness_pairs( & self ) -> &[(TObs,TObs)];

@@ -269,12 +269,13 @@ fn main() {
         .map(|x| Point3::from(x) )
         .collect();
         
-    let coords : Vec<(Point3<f32>,Point3<f32>)> = planner.get_trajectories_edges().iter()
+    let coords : Vec<((Point3<f32>,Point3<f32>),u32)> = planner.get_trajectories_edges().iter()
         .map(|x| {
-            let a = (x.0).0;
-            let b = (x.1).0;
-            ( Point3::new(a[0],a[1],a[2]),
-              Point3::new(b[0],b[1],b[2]) )
+            let a = ((x.0).0).0;
+            let b = ((x.0).1).0;
+            ( ( Point3::new(a[0],a[1],a[2]),
+                Point3::new(b[0],b[1],b[2]) ),
+              x.1 )
         })
         .collect();
 
@@ -328,7 +329,12 @@ fn main() {
         
         coords.iter()
             .for_each(|x| {
-                window.draw_line( &x.0, &x.1, &Point3::new(1.,1.,1.) );
+                //draw edge of different colours due to different type of edges
+                if x.1 == 0 { 
+                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(1.,1.,1.) );
+                } else {
+                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(0.,1.,0.5) );
+                }
             } );
             
         //domain perimeter

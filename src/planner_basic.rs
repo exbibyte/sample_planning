@@ -36,7 +36,7 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     param_obstacle: ParamObstacles<TObs>,
     states_cur: Option<TS>,
     trajectory: Vec<TObs>,
-    trajectory_edge: Vec<(TObs,TObs)>,
+    trajectory_edge: Vec<((TObs,TObs),u32)>,
     witness_pairs: Vec<(TObs,TObs)>,
     fini: bool,
     // rrt_tree: rrt_base::RRT_Base<TS,TC,TObs>,
@@ -165,7 +165,7 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
         self.trajectory.as_ref()
     }
 
-    fn get_trajectories_edges( & self ) -> &[(TObs,TObs)] {
+    fn get_trajectories_edges( & self ) -> &[((TObs,TObs),u32)] {
         self.trajectory_edge.as_ref()
     }
 
