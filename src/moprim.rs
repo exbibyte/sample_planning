@@ -119,4 +119,5 @@ impl <TS,TC,TObs> MoPrim < TS,TC,TObs > where TS: States, TC: Control, TObs: Sta
     pub fn print_stats( & self ) {
         info!( "motion primitive count: {}", self.lookup.len() );
     }
+
 }

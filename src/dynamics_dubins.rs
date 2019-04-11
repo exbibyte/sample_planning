@@ -14,14 +14,16 @@ use rand::Rng;
 extern crate mazth;
 use mazth::mat;
 
+use std::f32::consts::PI;
+
 // const config_space_goal : States3D = States3D([0.45,0.65,0.]);
-const config_space_goal : States3D = States3D([0.6,0.1,0.]);
+const config_space_goal : States3D = States3D([0.8,0.1,0.]);
 
 ///load model info to the caller
 pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and configuration space both are 3 dimensional in this case
     Param {
         // states_init: States3D([0.68, 0.3, 0.]), //default
-        states_init: States3D([0.1, 0.1, 0.]), //default
+        states_init: States3D([0.5, 0.1, 0.]), //default
         states_config_goal: config_space_goal, //default
         dynamics: dynamics,
         stop_cond: stop_cond,
@@ -31,7 +33,7 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and 
         ss_sampler: sampler_state_space,
         ss_metric: statespace_distance,
         // sim_delta: 0.05f32, //default
-        sim_delta: 0.025f32, //default
+        sim_delta: 0.035f32, //default
         iterations_bound: 300_000, //default, to be override by caller
 
         //motion primitive transform functions
@@ -147,16 +149,36 @@ pub fn sampler_state_space() -> States3D {
 ///aritrary goal condition
 pub fn stop_cond( system_states: States3D, states_config: States3D, states_config_goal: States3D )-> bool {
     states_config.0.iter()
-        .zip( states_config_goal.0.iter() )
+        .zip( states_config_goal.0.iter() ).take(2)
     // .all( |x| ((x.0)-(x.1)).abs() < 0.002 )
-    .all( |x| ((x.0)-(x.1)).abs() < 0.01 )
+    .all( |x| ((x.0)-(x.1)).abs() < 0.0075 )
     // config_space_distance(states_config, states_config_goal) < 0.001
 }
 
 ///estimate of closeness to goal condition in configuration space
 pub fn config_space_distance( states_config: States3D, states_config_goal: States3D )-> f32 {
     //in this case, just use ss distance metric
-    statespace_distance( states_config, states_config_goal )
+    
+    use std::f32::consts::PI;
+    
+    let va = states_config.get_vals();
+    let vb = states_config_goal.get_vals();
+
+    let mut ret = 0.;
+
+    //todo: check reference on suitable metric for rigid body orientation
+    
+    for i in 0..3{
+        ret += (va[i] - vb[i])*(va[i] - vb[i]);
+    }
+
+    // let angle = (va[2] - vb[2]);
+    
+    // let angle_1 = (va[2] + 2.*PI)%(2.*PI);
+    // let angle_2 = (vb[2] + 2.*PI)%(2.*PI);
+    // ret += (angle_1-angle_2)*(angle_1-angle_2);
+
+    ret
 }
 
 ///generate a possible state space valuation that satisfies the goal

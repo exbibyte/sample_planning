@@ -23,17 +23,18 @@ Inputs to program
   - [TODO] a better nearest neighbour query with runtime add/deletion
   
 # Running Planner
-* build and run in release mode with: cargo run --release --bin planner -- [-o \<file_obstacle> | -e \<.ele file path> -n \<.node file path> ]
+* build and run in release mode with: cargo run --release --bin planner -- [-o \<file_obstacle> | -e \<.ele file path> -n \<.node file path> ] -p <problem_instance_name>
 * required arguments:
-  * -o \<file_obstacle>: obstacle file path (eg: cargo run --release --bin planner -- -o obstacles/obs1.txt), or
+  * -o \<file_obstacle>: obstacle file path (eg: -o obstacles/obs1.txt)
   * -e \<.ele file path> -n \<.node file path> (see custom maps section)
+  * -p \<problem instance name> (eg: -p ob3 ), see prob_instances.rs for predefined list
 * optional arguments:
-  * -w: show witness node and witness representative pairs (cargo run --release --bin planner -- -w)
+  * -w: show witness node and witness representative pairs
       * drawn as a line(red) with end points (purple: witness), (blue: witness representative)
-  * -i \<N>: max iterations (cargo run --release --bin planner -- -i \<N>)
-  * -m \<model>: model selection (cargo run --release --bin planner -- -m \<model>), defaults to dubins
+  * -i \<N>: max iterations
+  * -m \<model>: model selection, defaults to dubins
       * \<model> variants: dubins
-  * -h: cargo run --release --bin planner -- --h
+  * -h: help
 
 # Running Obstacle Generator
 * build and run in release mode with: cargo run --release --bin gen_obs -- -f \<output_file_path>
@@ -41,7 +42,7 @@ Inputs to program
   * -f \<output_file_path> (eg: cargo run --release --bin gen_obs -- -f obstacles/obs99.txt)
 * optional arguments:
   * -n \<N>: number of obstacles to be generated (default: 30)
-  * -h: cargo run --release --bin gen_obs -- --h
+  * -h: cargo run --release --bin gen_obs -- -h
 
 # Using custom maps
 * a set of maps that is mainly used for benchmarking purposes obtainable from https://www.movingai.com/benchmarks/grids.html can be used, these are located in the /maps_custom folder
@@ -49,8 +50,8 @@ Inputs to program
 * triangulation is done using Triangle software from http://www.cs.cmu.edu/~quake/triangle.html
 * the maps are converted into a format for Triangle to process and output is loadable into our planner, these intermediate files are stored at /maps_custom/<game>/poly
 * some maps might have bad triangulation not useable for the planner
-* build and run in release mode with: cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path>
-  * (eg: cargo run --release --bin planner -- -e maps_custom/dragon_age/poly/ost100d.1.ele -n maps_custom/dragon_age/poly/ost100d.1.node -i 500000
+* build and run in release mode with: cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path> -p \<problem_instance_name>
+  * (eg: cargo run --release --bin planner -- -e maps_custom/dragon_age/poly/ost100d.1.ele -n maps_custom/dragon_age/poly/ost100d.1.node -p ost100d -i 500000
 * required arguments:
   * -e \<.ele file path>
   * -n \<.node file path>

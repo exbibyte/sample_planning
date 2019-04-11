@@ -128,8 +128,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for RRT_Base<TS,TC,TObs> where TS: States, 
         }
         true
     }
-    
-    fn get_best_trajectory( & self ) -> Option<Vec<TS>> {
+
+    fn get_best_trajectory_config_space( & self ) -> Vec<((TObs,TObs),u32)> {
         unimplemented!();
     }
 }

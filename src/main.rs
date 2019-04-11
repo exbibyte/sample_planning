@@ -7,6 +7,7 @@ extern crate pretty_env_logger;
 use std::env;
 use std::collections::HashMap;
 
+mod instrumentation;
 mod planner_param;
 mod planner;
 mod planner_basic;
@@ -17,12 +18,14 @@ mod rrt;
 mod control;
 mod map_loader;
 mod moprim;
+mod prob_instances;
 
 use planner_param::{Param,ParamObstacles,ObsVariant};
 use planner::Planner;
 use planner_basic::{PlannerBasic};
 use states::*;
 use control::*;
+use instrumentation::*;
 
 extern crate chrono;
 use chrono::{Duration,DateTime,Local};
@@ -37,11 +40,12 @@ use zpatial::mazth::i_shape::IShape;
 use na::{Vector3, UnitQuaternion, Translation3, Point3, U3};
 use kiss3d::window::Window;
 use kiss3d::light::Light;
+use kiss3d::camera::*;
 
 extern crate ncollide3d;
 use ncollide3d::procedural::{TriMesh,IndexBuffer};
 
-use rrt::kdtree;
+use rrt::{kdtree, rrt::RRT};
 
 extern crate clap;
 use clap::{Arg, App, SubCommand};
@@ -153,6 +157,11 @@ fn main() {
              .short("e")
              .help("custom map file")
              .takes_value(true))
+        .arg(Arg::with_name("prob_inst")
+             .short("p")
+             .help("problem instance name")
+             .required(true)
+             .takes_value(true))
         .get_matches();
 
     let display_witness_info = matches.is_present("witness");
@@ -161,6 +170,19 @@ fn main() {
         .value_of( "iterations" ).unwrap()
         .parse().expect("iteration argument not a number" );
 
+    //select init and goal states
+    
+    let prob_inst = prob_instances::load_3d_3d();
+
+    let prob_inst_query = matches.value_of("prob_inst").unwrap();
+    
+    let init_goal_pair = match prob_inst.get(prob_inst_query){
+        Some(x) => { x },
+        _ => {
+            panic!("problem instancen {} not found", prob_inst_query );
+        },
+    };
+    
     //dynamical model selection ---
     
     let model_query = matches.value_of("model").unwrap();
@@ -171,9 +193,14 @@ fn main() {
 
     let model_sel = match models.get( model_query ) {
         Some(m) => {
+            
             info!("model selected: {}", model_query);
             let mut model_default = m.clone();
             model_default.iterations_bound = iterations;
+
+            model_default.states_init = init_goal_pair.0;
+            model_default.states_config_goal = init_goal_pair.1;
+
             model_default
         },
         _ => { panic!("model not found: {}", model_query) },
@@ -255,15 +282,23 @@ fn main() {
     }
     
     //plan ---
+
     let _iterations = 0;
     let _time_game = 0;
 
+    let mut timer = Timer::default();
+    
     let (end_current_loop, end_all) = planner.plan_iteration( _iterations, _time_game );
 
+    info!( "plan overall time: {} ms", timer.dur_ms() );
+    
     //render ---
 
+    let mut camera = ArcBall::new( Point3::new(0.5,0.5,3.), Point3::new(0.5,0.5,0.) );
+        
     let mut window = Window::new("Sample Planner");
     window.set_light(Light::StickToCamera);
+    window.set_background_color( 1., 1., 1. );
     
     let coords_points : Vec<Point3<f32>> = planner.get_trajectories().iter()
         .map(|x| Point3::from(x) )
@@ -279,6 +314,16 @@ fn main() {
         })
         .collect();
 
+    let traj_solution : Vec<((Point3<f32>,Point3<f32>),u32)> = planner.get_trajectory_best_edges().iter()
+        .map(|x| {
+            let a = ((x.0).0).0;
+            let b = ((x.0).1).0;
+            ( ( Point3::new(a[0],a[1],a[2]),
+                Point3::new(b[0],b[1],b[2]) ),
+              x.1 )
+        })
+        .collect();
+    
     //(witness, witness representative) pairs
     let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = planner.get_witness_pairs().iter()
         .map(|x| {
@@ -325,15 +370,25 @@ fn main() {
         }
     }
     
-    while window.render() {
+    while window.render_with_camera( & mut camera ) {
         
         coords.iter()
             .for_each(|x| {
                 //draw edge of different colours due to different type of edges
                 if x.1 == 0 { 
-                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(1.,1.,1.) );
+                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(0.3,0.3,0.3) );
                 } else {
                     window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(0.,1.,0.5) );
+                }
+            } );
+
+        traj_solution.iter()
+            .for_each(|x| {
+                //draw edge of different colours due to different type of edges
+                if x.1 == 0 { 
+                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(1.,0.,0.) );
+                } else {
+                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(1.,1.,0.) );
                 }
             } );
             

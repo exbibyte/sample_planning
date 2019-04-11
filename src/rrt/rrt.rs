@@ -9,7 +9,7 @@ use zpatial::implement::bvh_median::Bvh;
 pub trait RRT < TS, TC, TObs > where TS: States, TC: Control, TObs: States {
     fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, obstacles_concrete: ParamObstacles<TObs> ) -> Self;
     fn iterate( & mut self, states_cur: TS ) -> bool;
-    fn get_best_trajectory( & self ) -> Option<Vec<TS>>;
+    fn get_best_trajectory_config_space( & self ) -> Vec<((TObs,TObs),u32)>;
     fn reset( & mut self );
     fn print_stats( &self ){}
 }
