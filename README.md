@@ -23,7 +23,7 @@ Inputs to program
   - [TODO] a better nearest neighbour query with runtime add/deletion
   
 # Running Planner
-* build and run in release mode with: cargo run --release --bin planner -- [-o \<file_obstacle> | -e \<.ele file path> -n \<.node file path> ] -p <problem_instance_name>
+* build and run in release mode with: cargo run --release --bin planner --  -p <problem_instance_name> (see src/prob_instances.rs)
 * required arguments:
   * -o \<file_obstacle>: obstacle file path (eg: -o obstacles/obs1.txt)
   * -e \<.ele file path> -n \<.node file path> (see custom maps section)
@@ -34,6 +34,9 @@ Inputs to program
   * -i \<N>: max iterations
   * -m \<model>: model selection, defaults to dubins
       * \<model> variants: dubins
+  * -o \<file_obstacle>
+  * -e \<.ele file path> -n \<.node file path>
+  * -b \<N>: batch iterations for rendering
   * -h: help
 
 # Running Obstacle Generator

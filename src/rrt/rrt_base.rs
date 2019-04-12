@@ -81,7 +81,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for RRT_Base<TS,TC,TObs> where TS: States, 
 
     }
     
-    fn iterate( & mut self, states_cur: TS ) -> bool {
+    fn iterate( & mut self, iteration: Option<u32> ) -> bool {
         
         //ignore obstacles for now
         

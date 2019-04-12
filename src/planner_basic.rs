@@ -93,31 +93,28 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
         self.param.clone()
     }
     
-    fn plan_iteration( & mut self, iteration: u64, time: u64 ) -> (bool,bool) {
+    fn plan_iteration( & mut self, iteration: Option<u32> ) -> bool {
             
         let mut count = 0;
 
-        self.states_cur = Some(self.param.states_init.clone());
-
         let mut timer = Timer::default();
         
-        self.rrt_tree.iterate( self.states_cur.as_ref().unwrap().clone() );
+        let changed = self.rrt_tree.iterate( iteration );
 
         let t_delta = timer.dur_ms();
         
-        info!("plan iteration end, duration: {}ms", t_delta);
-        
-        self.trajectory = self.rrt_tree.get_trajectory_config_space();
-        self.trajectory_edge = self.rrt_tree.get_trajectory_edges_config_space();
+        // info!("plan iteration end, duration: {}ms", t_delta);
 
-        self.trajectory_best = self.rrt_tree.get_best_trajectory_config_space();
-        
-        self.witness_pairs = self.rrt_tree.get_witness_representatives_config_space();
+        if changed {
+            
+            self.trajectory = self.rrt_tree.get_trajectory_config_space();
+            self.trajectory_edge = self.rrt_tree.get_trajectory_edges_config_space();
+            self.trajectory_best = self.rrt_tree.get_best_trajectory_config_space();
+            self.witness_pairs = self.rrt_tree.get_witness_representatives_config_space();
 
-        //todo
-        let end_all = true;
-        let end_current = true;
-        (end_current, end_all)
+        }
+
+        changed
     }
     fn get_trajectories( & self ) -> &[TObs] {
         self.trajectory.as_ref()

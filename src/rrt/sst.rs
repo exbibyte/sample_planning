@@ -136,7 +136,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                                 cost: 0 } ],
 
             nodes_freelist: vec![],
-            witnesses: vec![],
+            witnesses: vec![ param.states_init.clone() ],
             witness_representative: HashMap::new(),
             edges: HashMap::new(),
             
@@ -145,7 +145,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             monte_carlo_prop_l: param_tree.prop_delta_low,
             monte_carlo_prop_h: param_tree.prop_delta_high,
             
-            nodes_active: HashSet::new(),
+            nodes_active: [0].to_vec().iter().cloned().collect(),
             nodes_inactive: HashSet::new(),
             link_parent: HashMap::new(),
 
@@ -159,7 +159,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             stat_iter_no_change: 0,
             stat_iter_collision: 0,
 
-            iter_exec: param.iterations_bound,
+            iter_exec: 0,
 
             #[cfg(feature="motion_primitives")]
             mo_prim: MoPrim::init( param.ss_metric,
@@ -418,7 +418,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.stat_pruned_nodes = 0;
         self.stat_iter_no_change = 0;
         self.stat_iter_collision = 0;
-        self.iter_exec = self.param.iterations_bound;
+        self.iter_exec = 0;
         self.idx_reached = None;
         self.stat_time_mo_prim_query = 0.;
         self.stat_time_witness_nn_query = 0.;
@@ -426,14 +426,25 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.stat_time_all = 0.;
     }
     
-    fn iterate( & mut self, states_cur: TS ) -> bool {
+    fn iterate( & mut self, iteration: Option<u32> ) -> bool {
+
+        if self.idx_reached.is_some() || self.iter_exec >= self.param.iterations_bound {
+            return false
+        }
         
-        self.reset();
+        // self.reset();
 
         let mut timer_all = Timer::default();
-            
-        'l_outer: for i in 0..self.param.iterations_bound {
 
+        let iter_batch = match iteration {
+            Some(x) => { x },
+            _ => { self.param.iterations_bound },
+        };
+        
+        'l_outer: for i in 0..iter_batch {
+
+            self.iter_exec += 1;
+            
             let ss_sample = (self.param.ss_sampler)(); //sampler for state space
 
             //get best active state in vicinity delta_v of ss_sample, or return nearest active state
@@ -585,13 +596,17 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                 (Some(x),true) => {
                     let d_goal = (self.param.cs_metric)( config_space_coord_after.clone(), self.param.states_config_goal.clone() );
                     info!("found a path to goal on iteration: {}, diff: {}", i, d_goal );
-                    self.iter_exec = i;
+                    // self.iter_exec = i;
                     self.idx_reached = Some(x);
                     break;
                 },
                 _ => {},
             }
         }
+
+        // if self.idx_reached.is_none() {
+        //     self.iter_exec += iter_batch;
+        // }
         
         let t_delta_all = timer_all.dur_ms();
         self.stat_time_all += t_delta_all;

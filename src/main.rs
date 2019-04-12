@@ -4,6 +4,8 @@
 
 extern crate pretty_env_logger;
 
+// extern crate crossbeam;
+
 use std::env;
 use std::collections::HashMap;
 
@@ -223,6 +225,10 @@ fn main() {
              .help("problem instance name")
              .required(true)
              .takes_value(true))
+        .arg(Arg::with_name("batch_iter")
+             .short("b")
+             .help("batched iteration for display")
+             .takes_value(true))
         .get_matches();
 
     let display_witness_info = matches.is_present("witness");
@@ -364,16 +370,10 @@ fn main() {
     
     //plan ---
 
-    let _iterations = 0;
-    let _time_game = 0;
-
-    let mut timer = Timer::default();
-
-    let mut pl = planner.unwrap();
-        
-    let (end_current_loop, end_all) = pl.plan_iteration( _iterations, _time_game );
-
-    info!( "plan overall time: {} ms", timer.dur_ms() );
+    let iter_batch = match matches.value_of("batch_iter"){
+        Some(x) => Some(x.parse::<u32>().expect("batch iter not a number")),
+        _ => None,
+    };
     
     //render ---
 
@@ -382,40 +382,6 @@ fn main() {
     let mut window = Window::new("Sample Planner");
     window.set_light(Light::StickToCamera);
     window.set_background_color( 1., 1., 1. );
-    
-    let coords_points : Vec<Point3<f32>> = pl.get_trajectories().iter()
-        .map(|x| Point3::from(x) )
-        .collect();
-        
-    let coords : Vec<((Point3<f32>,Point3<f32>),u32)> = pl.get_trajectories_edges().iter()
-        .map(|x| {
-            let a = ((x.0).0).0;
-            let b = ((x.0).1).0;
-            ( ( Point3::new(a[0],a[1],a[2]),
-                Point3::new(b[0],b[1],b[2]) ),
-              x.1 )
-        })
-        .collect();
-
-    let traj_solution : Vec<((Point3<f32>,Point3<f32>),u32)> = pl.get_trajectory_best_edges().iter()
-        .map(|x| {
-            let a = ((x.0).0).0;
-            let b = ((x.0).1).0;
-            ( ( Point3::new(a[0],a[1],a[2]),
-                Point3::new(b[0],b[1],b[2]) ),
-              x.1 )
-        })
-        .collect();
-    
-    //(witness, witness representative) pairs
-    let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = pl.get_witness_pairs().iter()
-        .map(|x| {
-            let a = (x.0).0;
-            let b = (x.1).0;
-            ( Point3::new(a[0],a[1],a[2]),
-              Point3::new(b[0],b[1],b[2]) )
-        })
-        .collect();
 
     let mut g2 = window.add_group();
 
@@ -452,8 +418,52 @@ fn main() {
             _ => {},
         }
     }
+
+    let mut pl = planner.unwrap();
+
+    info!("computing...");
     
     while window.render_with_camera( & mut camera ) {
+
+        let mut timer = Timer::default();
+
+        let changed = pl.plan_iteration( iter_batch );
+        
+        // info!( "plan batch iteration ({:?}) time: {} ms", iter_batch, timer.dur_ms() );
+
+        let coords_points : Vec<Point3<f32>> = pl.get_trajectories().iter()
+            .map(|x| Point3::from(x) )
+            .collect();
+        
+        let coords : Vec<((Point3<f32>,Point3<f32>),u32)> = pl.get_trajectories_edges().iter()
+            .map(|x| {
+                let a = ((x.0).0).0;
+                let b = ((x.0).1).0;
+                ( ( Point3::new(a[0],a[1],a[2]),
+                    Point3::new(b[0],b[1],b[2]) ),
+                    x.1 )
+            })
+            .collect();
+
+        let traj_solution : Vec<((Point3<f32>,Point3<f32>),u32)> = pl.get_trajectory_best_edges().iter()
+            .map(|x| {
+                let a = ((x.0).0).0;
+                let b = ((x.0).1).0;
+                ( ( Point3::new(a[0],a[1],a[2]),
+                    Point3::new(b[0],b[1],b[2]) ),
+                    x.1 )
+            })
+            .collect();
+        
+        //(witness, witness representative) pairs
+        let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = pl.get_witness_pairs().iter()
+            .map(|x| {
+                let a = (x.0).0;
+                let b = (x.1).0;
+                ( Point3::new(a[0],a[1],a[2]),
+                  Point3::new(b[0],b[1],b[2]) )
+            })
+            .collect();
         
         coords.iter()
             .for_each(|x| {

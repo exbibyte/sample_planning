@@ -7,7 +7,8 @@ use zpatial::implement::bvh_median::Bvh;
 
 
 pub trait RRT < TS, TC, TObs > where TS: States, TC: Control, TObs: States {
-    fn iterate( & mut self, states_cur: TS ) -> bool;
+    ///returns true if iteration induces change, false otherwise
+    fn iterate( & mut self, iteration: Option<u32> ) -> bool;
     fn get_best_trajectory_config_space( & self ) -> Vec<((TObs,TObs),u32)>;
     fn reset( & mut self );
     fn print_stats( &self ){}
