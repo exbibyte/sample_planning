@@ -82,13 +82,18 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
     ///storage for control input for the state space pair (parent node,child node)
     pub edges: HashMap< (usize,usize), Edge<TC> >,
+
     pub delta_v: f32,
     pub delta_s: f32,
+    pub monte_carlo_prop_l: f32,
+    pub monte_carlo_prop_h: f32,
 
     pub nn_query: NN_Naive<TS,TC,TObs>,
 
     pub stat_pruned_nodes: u32,
     pub stat_iter_no_change: u32,
+
+    pub stat_iter_collision: u32,
 
     pub iter_exec: u32,
 
@@ -109,6 +114,69 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
+    
+    pub fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, obstacles_concrete: ParamObstacles<TObs>, param_tree: ParamTree ) -> Self {
+        //todo process obstacles...
+
+        let box_obstacles = match obstacles_concrete.obstacles {
+            ObsVariant::RBOX(_) => true,
+            _ => false
+        };
+        
+        Self {
+            
+            are_obstacles_boxes: box_obstacles,
+            
+            param: param.clone(),
+            obstacles: obstacles,
+            obstacles_actual: obstacles_concrete,
+            nodes: vec![ Node { id: 0,
+                                state: param.states_init.clone(),
+                                children: HashSet::new(),
+                                cost: 0 } ],
+
+            nodes_freelist: vec![],
+            witnesses: vec![],
+            witness_representative: HashMap::new(),
+            edges: HashMap::new(),
+            
+            delta_v: param_tree.delta_v,
+            delta_s: param_tree.delta_s,
+            monte_carlo_prop_l: param_tree.prop_delta_low,
+            monte_carlo_prop_h: param_tree.prop_delta_high,
+            
+            nodes_active: HashSet::new(),
+            nodes_inactive: HashSet::new(),
+            link_parent: HashMap::new(),
+
+            nn_query: NN_Naive {
+                phantom_ts: PhantomData,
+                phantom_tc: PhantomData,
+                phantom_tobs: PhantomData,
+            },
+
+            stat_pruned_nodes: 0,
+            stat_iter_no_change: 0,
+            stat_iter_collision: 0,
+
+            iter_exec: param.iterations_bound,
+
+            #[cfg(feature="motion_primitives")]
+            mo_prim: MoPrim::init( param.ss_metric,
+                                   param.motion_primitive_xform.expect("motion primitive transform"),
+                                   param.motion_primitive_xform_inv.expect("motion primitive transform inverse") ),
+            
+            #[cfg(feature="motion_primitives")]
+            stat_motion_prim_invoked: 0,
+
+            idx_reached: None,
+
+            stat_time_all: 0.,
+            stat_time_mo_prim_query: 0.,
+            stat_time_witness_nn_query: 0.,
+            stat_time_main_prop_check: 0.,
+        }
+    }
 
     pub fn get_trajectory_config_space( & self ) -> Vec<TObs> {
         self.nodes.iter()
@@ -123,7 +191,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                 let state_witness = self.witnesses[*idx_witness].clone();
                 let state_repr = self.nodes[*idx_repr].state.clone();
                 ( (self.param.project_state_to_config)(state_witness),
-                  (self.param.project_state_to_config)(state_repr) )
+                   (self.param.project_state_to_config)(state_repr) )
             })
             .collect()
     }
@@ -317,7 +385,9 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
         //enforce bounds
         let mut val: f32 = SmallRng::from_entropy().sample(Standard);
-        val = if val < 0.1 { 0.1 } else { val };
+        
+        val = if val < self.monte_carlo_prop_l { self.monte_carlo_prop_l } else { val };
+        val = if val > self.monte_carlo_prop_h { self.monte_carlo_prop_h } else { val };
         
         let monte_carlo_prop_delta = val * self.param.sim_delta;
         
@@ -329,66 +399,6 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 }
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-    fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, obstacles_concrete: ParamObstacles<TObs> ) -> Self {
-        //todo process obstacles...
-
-        let box_obstacles = match obstacles_concrete.obstacles {
-            ObsVariant::RBOX(_) => true,
-            _ => false
-        };
-        
-        Self {
-            
-            are_obstacles_boxes: box_obstacles,
-            
-            param: param.clone(),
-            obstacles: obstacles,
-            obstacles_actual: obstacles_concrete,
-            nodes: vec![ Node { id: 0,
-                                state: param.states_init.clone(),
-                                children: HashSet::new(),
-                                cost: 0 } ],
-
-            nodes_freelist: vec![],
-            witnesses: vec![],
-            witness_representative: HashMap::new(),
-            edges: HashMap::new(),
-            // delta_v: 0.008,
-            // delta_s: 0.0015,
-            delta_v: 0.01,
-            delta_s: 0.0025,
-            
-            nodes_active: HashSet::new(),
-            nodes_inactive: HashSet::new(),
-            link_parent: HashMap::new(),
-
-            nn_query: NN_Naive {
-                phantom_ts: PhantomData,
-                phantom_tc: PhantomData,
-                phantom_tobs: PhantomData,
-            },
-
-            stat_pruned_nodes: 0,
-            stat_iter_no_change: 0,
-
-            iter_exec: param.iterations_bound,
-
-            #[cfg(feature="motion_primitives")]
-            mo_prim: MoPrim::init( param.ss_metric,
-                                   param.motion_primitive_xform.expect("motion primitive transform"),
-                                   param.motion_primitive_xform_inv.expect("motion primitive transform inverse") ),
-            
-            #[cfg(feature="motion_primitives")]
-            stat_motion_prim_invoked: 0,
-
-            idx_reached: None,
-
-            stat_time_all: 0.,
-            stat_time_mo_prim_query: 0.,
-            stat_time_witness_nn_query: 0.,
-            stat_time_main_prop_check: 0.,
-        }
-    }
 
     fn reset( & mut self ){
         
@@ -407,6 +417,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.nodes_freelist.clear();
         self.stat_pruned_nodes = 0;
         self.stat_iter_no_change = 0;
+        self.stat_iter_collision = 0;
         self.iter_exec = self.param.iterations_bound;
         self.idx_reached = None;
         self.stat_time_mo_prim_query = 0.;
@@ -511,6 +522,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
                         if self.collision_check( &config_space_coord_before, &config_space_coord_after ) {
                             self.stat_iter_no_change += 1;
+                            self.stat_iter_collision += 1;
                             None
                         } else {
 
@@ -521,12 +533,14 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                                                  is_using_motion_prim );
 
                             let node_inactive = repr;
-                            
-                            self.inactivate_node( node_inactive.clone() );
-                            
-                            //remove leaf nodes and branches from propagation tree if possible
-                            self.prune_nodes( node_inactive );
 
+                            #[cfg(not(feature="disable_pruning"))]
+                            {
+                                self.inactivate_node( node_inactive.clone() );
+                                
+                                //remove leaf nodes and branches from propagation tree if possible
+                                self.prune_nodes( node_inactive );
+                            }
                             //save new representative state idx for current witness
                             *self.witness_representative.get_mut( &witness_idx ).unwrap() = idx_inserted;
 
@@ -547,6 +561,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     //no representative found, so just add the propagated state as representative
                     if self.collision_check( &config_space_coord_before, &config_space_coord_after ) {
                         self.stat_iter_no_change += 1;
+                        self.stat_iter_collision += 1;
                         None
                     } else {
 
@@ -628,7 +643,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         info!( "nodes inactive: {}", self.nodes_inactive.len() );
         info!( "pruned_nodes: {}", self.stat_pruned_nodes );
         info!( "nodes freelist: {}", self.nodes_freelist.len() );
-        info!( "iterations no change: {}/{}", self.stat_iter_no_change, self.iter_exec );
+        info!( "iterations no change: {}/{}, {:.2}%", self.stat_iter_no_change, self.iter_exec, self.stat_iter_no_change as f32/self.iter_exec as f32 * 100. );
+        info!( "iterations collision: {}/{}, {:.2}%", self.stat_iter_collision, self.iter_exec, self.stat_iter_collision as f32/self.iter_exec as f32 * 100. );
 
         info!( "stat_time_mo_prim_query: {} ms / {}%", self.stat_time_mo_prim_query, self.stat_time_mo_prim_query / self.stat_time_all * 100. );
         info!( "stat_time_witness_nn_query: {} ms / {}%", self.stat_time_witness_nn_query, self.stat_time_witness_nn_query / self.stat_time_all * 100. );

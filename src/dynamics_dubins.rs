@@ -22,9 +22,8 @@ const config_space_goal : States3D = States3D([0.8,0.1,0.]);
 ///load model info to the caller
 pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and configuration space both are 3 dimensional in this case
     Param {
-        // states_init: States3D([0.68, 0.3, 0.]), //default
-        states_init: States3D([0.5, 0.1, 0.]), //default
-        states_config_goal: config_space_goal, //default
+        states_init: States3D([0.5, 0.1, 0.]), //default, override by prob_instances.rs file
+        states_config_goal: config_space_goal, //default, override by prob_instances.rs file
         dynamics: dynamics,
         stop_cond: stop_cond,
         cs_metric: config_space_distance,
@@ -32,9 +31,8 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and 
         param_sampler: sampler_parameter_space,
         ss_sampler: sampler_state_space,
         ss_metric: statespace_distance,
-        // sim_delta: 0.05f32, //default
-        sim_delta: 0.035f32, //default
-        iterations_bound: 300_000, //default, to be override by caller
+        sim_delta: 0.05f32, //default, optinal override by prob_instances.rs file
+        iterations_bound: 300_000, //override via commandline and prob_instances.rs file
 
         //motion primitive transform functions
         motion_primitive_xform: Some(motion_primitive_xform),
@@ -132,7 +130,7 @@ pub fn sampler_parameter_space( delta: f32 ) -> Control1D {
     let val: f32 = SmallRng::from_entropy().sample(Standard);
     
     // Control1D( [ (rng.gen_range(-1., 1.)*20./180.* PI )/delta ] )
-    Control1D( [ ( 2. * (val-0.5) * 20./180.* PI )/delta ] )
+    Control1D( [ ( 2. * (val-0.5) * 30./180.* PI )/delta ] )
 }
 
 pub fn sampler_state_space() -> States3D {

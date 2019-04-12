@@ -40,13 +40,13 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     trajectory_best: Vec<((TObs,TObs),u32)>,
     witness_pairs: Vec<(TObs,TObs)>,
     fini: bool,
-    // rrt_tree: rrt_base::RRT_Base<TS,TC,TObs>,
     rrt_tree: sst::SST<TS,TC,TObs>,
 }
 
 impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub fn init( param: Param<TS,TC,TObs>,
-                 param_obs: ParamObstacles<TObs> ) -> PlannerBasic<TS,TC,TObs> {
+                 param_obs: ParamObstacles<TObs>,
+                 param_tree: ParamTree ) -> PlannerBasic<TS,TC,TObs> {
 
         use zpatial::mazth::i_shape::IShape;
         
@@ -82,7 +82,7 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
             rrt_tree: sst::SST::init( &param,
                                        obs_tree, //contains proxy to obstacles
                                        param_obs, //contains actual obstacles
-            ),
+                                       param_tree ),
         }
     }
 }

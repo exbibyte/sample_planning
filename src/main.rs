@@ -20,7 +20,7 @@ mod map_loader;
 mod moprim;
 mod prob_instances;
 
-use planner_param::{Param,ParamObstacles,ObsVariant};
+use planner_param::{Param,ParamObstacles,ObsVariant,ParamTree};
 use planner::Planner;
 use planner_basic::{PlannerBasic};
 use states::*;
@@ -121,6 +121,69 @@ fn load_obs_from_file<TObs>(f: &str) -> ParamObstacles<TObs> where TObs: States 
     }    
 }
 
+///returns planner, mesh, mesh_max_x, mesh_max_y
+fn load_custom_map( path_nodes: &str, path_ele: &str ) -> ( ParamObstacles<States3D>,
+                                                            TriMesh<f32>,
+                                                            f32,
+                                                            f32 ) {
+    
+    //load custom map
+
+    use map_loader;
+
+    println!("loading map.");
+
+    let (verts,tris,max_x,max_y) = map_loader::load_map(path_ele,path_nodes);
+
+    println!("loaded map.");
+    
+    let mesh_points = verts.iter().map(|(x,y)| Point3::new(*x,*y,0.) ).collect::<Vec<_>>();
+    let mesh_tris = tris.iter().map(|x| Point3::new(x[0] as u32,x[1] as u32 ,x[2] as u32) ).collect::<Vec<_>>();
+
+    info!("custom map triangle vert count: {}, triangle count: {}", mesh_points.len(), mesh_tris.len() );
+    
+    let indexbuf = IndexBuffer::Unified( mesh_tris );
+
+    let map_custom_mesh = TriMesh::new( mesh_points,
+                                             None,
+                                             None,
+                                             Some(indexbuf) );
+
+    let triangle_prims = tris.iter()
+        .map(|x| {
+            
+            let v0 = verts[x[0] as usize];
+            let v1 = verts[x[1] as usize];
+            let v2 = verts[x[2] as usize];
+
+            let height = 1.;
+            let tp = TriPrism::init( &[ v0.0 as _, v0.1 as _, -0.5,
+                                        v1.0 as _, v1.1 as _, -0.5,
+                                        v2.0 as _, v2.1 as _, -0.5 ], height );
+            tp
+
+        }).collect::<Vec<_>>();
+
+    use std::marker::PhantomData;
+    
+    let obs = ParamObstacles {
+        obstacles: ObsVariant::TRIPRISM(triangle_prims),
+        states_info: PhantomData,
+    };
+    
+    ( obs,
+      map_custom_mesh,
+      max_x,
+      max_y )
+}
+
+fn load_obs_map( obs_path: &str ) -> ParamObstacles<States3D> {
+    
+    let obs = load_obs_from_file::<States3D>(obs_path);
+    
+    obs
+}
+
 fn main() {
 
     env::set_var("LOG_SETTING", "info" );
@@ -130,14 +193,13 @@ fn main() {
     let matches = App::new("sample_planner")
         .version("0.0")
         .author("Yuan Liu")
-        .about("a toy planner")
+        .about("motion planner")
         .arg(Arg::with_name("witness")
              .short("w")
              .help("shows witness node and witness representative"))
         .arg(Arg::with_name("iterations")
              .short("i")
              .help("iteration upper bound")
-             .default_value("300000")
              .takes_value(true))
         .arg(Arg::with_name("model")
              .short("m")
@@ -147,7 +209,6 @@ fn main() {
         .arg(Arg::with_name("obstacle")
              .short("o")
              .help("obstacle file")
-             .default_value("obstacles/obs1.txt")
              .takes_value(true))
         .arg(Arg::with_name("custom_map_nodes")
              .short("n")
@@ -165,10 +226,6 @@ fn main() {
         .get_matches();
 
     let display_witness_info = matches.is_present("witness");
-    
-    let iterations : u32 = matches
-        .value_of( "iterations" ).unwrap()
-        .parse().expect("iteration argument not a number" );
 
     //select init and goal states
     
@@ -176,13 +233,25 @@ fn main() {
 
     let prob_inst_query = matches.value_of("prob_inst").unwrap();
     
-    let init_goal_pair = match prob_inst.get(prob_inst_query){
-        Some(x) => { x },
+    let ( init_goal_pair, param_tree, prop_step, iter_bound, map_path ) = match prob_inst.get(prob_inst_query){
+        Some( (ini, goal, tree_param, step, iter, path) ) => { ( (*ini,*goal), tree_param.clone(), *step, *iter, path.clone() ) },
         _ => {
             panic!("problem instancen {} not found", prob_inst_query );
         },
     };
-    
+
+    let iterations = match matches.value_of( "iterations" ) {
+        Some(x) => {
+            x.parse().expect("iteration argument not a number" )
+        },
+        _ => {
+            match iter_bound {
+                Some(x) => { x },
+                _ => { panic!("iteration not provided"); },
+            }
+        },
+    };
+        
     //dynamical model selection ---
     
     let model_query = matches.value_of("model").unwrap();
@@ -193,92 +262,104 @@ fn main() {
 
     let model_sel = match models.get( model_query ) {
         Some(m) => {
-            
-            info!("model selected: {}", model_query);
+
             let mut model_default = m.clone();
+            
             model_default.iterations_bound = iterations;
+
+            match prop_step {
+                Some(x) => {
+                    model_default.sim_delta = x;
+                },
+                _ => {},
+            }
 
             model_default.states_init = init_goal_pair.0;
             model_default.states_config_goal = init_goal_pair.1;
 
+            info!("model selected: {}", model_default);
+            
             model_default
         },
         _ => { panic!("model not found: {}", model_query) },
     };
 
-    let mut planner : Box<Planner<States3D,Control1D,States3D> >;
-    let mut obs_copy : ParamObstacles<States3D>;
+    let mut planner : Option<Box<Planner<States3D,Control1D,States3D> >> = None;
+    let mut obs_copy : Option<ParamObstacles<States3D>> = None;
 
     let mut map_custom_mesh = None;
     let mut map_custom_max_x = 1.;
     let mut map_custom_max_y = 1.;
+
+    info!( "plan info: {}", &model_sel );
     
-    match ( matches.value_of("custom_map_nodes"), matches.value_of("custom_map_ele") ) {
-        (Some(path_nodes),Some(path_ele)) => {
-            //load custom map
-
-            use map_loader;
-
-            println!("loading map.");
-
-            let (verts,tris,max_x,max_y) = map_loader::load_map(path_ele,path_nodes);
-
-            map_custom_max_x = max_x;
-            map_custom_max_y = max_y;
-
-            println!("loaded map.");
-            
-            let mesh_points = verts.iter().map(|(x,y)| Point3::new(*x,*y,0.) ).collect::<Vec<_>>();
-            let mesh_tris = tris.iter().map(|x| Point3::new(x[0] as u32,x[1] as u32 ,x[2] as u32) ).collect::<Vec<_>>();
-
-            info!("custom map triangle vert count: {}, triangle count: {}", mesh_points.len(), mesh_tris.len() );
-            
-            let indexbuf = IndexBuffer::Unified( mesh_tris );
-
-            map_custom_mesh = Some(TriMesh::new( mesh_points,
-                                            None,
-                                            None,
-                                            Some(indexbuf) ) );
-
-            let triangle_prims = tris.iter()
-                .map(|x| {
-                    
-                    let v0 = verts[x[0] as usize];
-                    let v1 = verts[x[1] as usize];
-                    let v2 = verts[x[2] as usize];
-
-                    let height = 1.;
-                    let tp = TriPrism::init( &[ v0.0 as _, v0.1 as _, -0.5,
-                                                v1.0 as _, v1.1 as _, -0.5,
-                                                v2.0 as _, v2.1 as _, -0.5 ], height );
-                    tp
-
-                }).collect::<Vec<_>>();
-
-            use std::marker::PhantomData;
-            
-            let obs = ParamObstacles {
-                obstacles: ObsVariant::TRIPRISM(triangle_prims),
-                states_info: PhantomData,
-            };
-
-            obs_copy = obs.clone();
-            
-            planner = Box::new( PlannerBasic::init( model_sel.clone(),
-                                                    obs ) );
+    info!( "tree param: {}", &param_tree );
+    
+    match ( map_path, ( matches.value_of("custom_map_nodes"), matches.value_of("custom_map_ele") ) ) {
+        ( Some(prob_instances::MapPath::Game((node_path,ele_path))), ( Some(node_path_cmdline), Some(ele_path_cmdline) ) ) => {
+            //priority for command line
+            let (o,m,x,y) = load_custom_map( node_path_cmdline, ele_path_cmdline );            
+            planner = Some(Box::new( PlannerBasic::init( model_sel.clone(),
+                                                         o.clone(),
+                                                         param_tree.clone() ) ) );
+            obs_copy = Some(o);
+            map_custom_mesh = Some(m);
+            map_custom_max_x = x;
+            map_custom_max_y = y;
         },
-        _ => {
-            
-            let file_obs : & str = matches.value_of("obstacle").unwrap();
-            let obs = load_obs_from_file::<States3D>(file_obs);
-
-            info!( "plan info: {}", &model_sel );
-            
-            obs_copy = obs.clone();
-            
-            planner = Box::new( PlannerBasic::init( model_sel.clone(),
-                                                    obs ) );            
+        ( Some(prob_instances::MapPath::Game((node_path,ele_path))), _ ) => {
+            let (o,m,x,y) = load_custom_map( node_path, ele_path );
+            planner = Some(Box::new( PlannerBasic::init( model_sel.clone(),
+                                                         o.clone(),
+                                                         param_tree.clone() ) ) );
+            obs_copy = Some(o);
+            map_custom_mesh = Some(m);
+            map_custom_max_x = x;
+            map_custom_max_y = y;
         },
+        ( _, ( Some(node_path_cmdline), Some(ele_path_cmdline) ) ) => {
+            let (o,m,x,y) = load_custom_map( node_path_cmdline, ele_path_cmdline );
+            planner = Some( Box::new( PlannerBasic::init( model_sel.clone(),
+                                                          o.clone(),
+                                                          param_tree.clone() ) ) );
+            obs_copy = Some(o);
+            map_custom_mesh = Some(m);
+            map_custom_max_x = x;
+            map_custom_max_y = y;
+        },
+        _ => {},
+    }
+
+    if planner.is_none() {
+        match ( map_path, matches.value_of("obstacle") ) {
+            ( Some(prob_instances::MapPath::Obs(obs_path)), Some(obs_path_cmdline) ) => {
+                //priority for command line
+                let o = load_obs_map( obs_path_cmdline );
+                planner = Some( Box::new( PlannerBasic::init( model_sel.clone(),
+                                                              o.clone(),
+                                                              param_tree.clone() ) ) );
+                obs_copy = Some(o);
+            },
+            ( Some(prob_instances::MapPath::Obs(obs_path)), _ ) => {
+                let o = load_obs_map( obs_path );
+                planner = Some( Box::new( PlannerBasic::init( model_sel.clone(),
+                                                              o.clone(),
+                                                              param_tree.clone() ) ) );
+                obs_copy = Some(o);
+            },
+            ( _, Some(obs_path_cmdline) ) => {
+                let o = load_obs_map( obs_path_cmdline );
+                planner = Some( Box::new( PlannerBasic::init( model_sel.clone(),
+                                                              o.clone(),
+                                                              param_tree.clone() ) ) );
+                obs_copy = Some(o);
+            },
+            _ => {},
+        }
+    }
+
+    if planner.is_none() || obs_copy.is_none() {
+        panic!("map / obstacle not provided");
     }
     
     //plan ---
@@ -287,8 +368,10 @@ fn main() {
     let _time_game = 0;
 
     let mut timer = Timer::default();
-    
-    let (end_current_loop, end_all) = planner.plan_iteration( _iterations, _time_game );
+
+    let mut pl = planner.unwrap();
+        
+    let (end_current_loop, end_all) = pl.plan_iteration( _iterations, _time_game );
 
     info!( "plan overall time: {} ms", timer.dur_ms() );
     
@@ -300,11 +383,11 @@ fn main() {
     window.set_light(Light::StickToCamera);
     window.set_background_color( 1., 1., 1. );
     
-    let coords_points : Vec<Point3<f32>> = planner.get_trajectories().iter()
+    let coords_points : Vec<Point3<f32>> = pl.get_trajectories().iter()
         .map(|x| Point3::from(x) )
         .collect();
         
-    let coords : Vec<((Point3<f32>,Point3<f32>),u32)> = planner.get_trajectories_edges().iter()
+    let coords : Vec<((Point3<f32>,Point3<f32>),u32)> = pl.get_trajectories_edges().iter()
         .map(|x| {
             let a = ((x.0).0).0;
             let b = ((x.0).1).0;
@@ -314,7 +397,7 @@ fn main() {
         })
         .collect();
 
-    let traj_solution : Vec<((Point3<f32>,Point3<f32>),u32)> = planner.get_trajectory_best_edges().iter()
+    let traj_solution : Vec<((Point3<f32>,Point3<f32>),u32)> = pl.get_trajectory_best_edges().iter()
         .map(|x| {
             let a = ((x.0).0).0;
             let b = ((x.0).1).0;
@@ -325,7 +408,7 @@ fn main() {
         .collect();
     
     //(witness, witness representative) pairs
-    let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = planner.get_witness_pairs().iter()
+    let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = pl.get_witness_pairs().iter()
         .map(|x| {
             let a = (x.0).0;
             let b = (x.1).0;
@@ -347,7 +430,7 @@ fn main() {
         };
         
         let mut handle = g2.add_trimesh( map_custom_mesh.unwrap(), Vector3::new( 1./scale, 1./scale, 1.) );
-        handle.set_color(0.5, 0.5, 0.5);
+        handle.set_color(0.3, 0.3, 0.3);
     } else {
         
         let mut g1 = window.add_group();
@@ -359,7 +442,7 @@ fn main() {
         c.set_points_size(5.0);
         c.set_surface_rendering_activation(false);
         
-        match obs_copy.obstacles {
+        match obs_copy.unwrap().obstacles {
             ObsVariant::RBOX(ref o) => {
                 obs_data = o.iter().map(|x| {
                     let l = x._size as f32;
@@ -411,10 +494,14 @@ fn main() {
         window.set_point_size(10.);
         
         //start point
-        window.draw_point( &Point3::from( &model_sel.states_init ),
+        
+        let config_state_init = (model_sel.project_state_to_config)(model_sel.states_init.clone());
+        window.draw_point( &Point3::from( &config_state_init ),
                             &Point3::new(0.,1.,0.) );
+
         //dest point
-        window.draw_point( &Point3::from( &model_sel.states_config_goal ),
+        let config_state_goal = (model_sel.project_state_to_config)(model_sel.states_config_goal.clone());
+        window.draw_point( &Point3::from( &config_state_goal ),
                             &Point3::new(1.,0.,0.) );
 
         obs_data.iter()

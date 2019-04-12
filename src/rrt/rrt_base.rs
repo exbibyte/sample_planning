@@ -39,6 +39,16 @@ pub struct RRT_Base<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 }
 
 impl <TS,TC,TObs> RRT_Base<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
+    pub fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, obstacles_concrete: ParamObstacles<TObs> ) -> Self {
+        //todo process obstacles...
+        
+        Self {
+            param: param.clone(),
+            obstacles: obstacles,
+            nodes: vec![ Node { id: 0, state: param.states_init.clone(), children: HashSet::new() } ],
+            edges: HashMap::new(),
+        }
+    }
     pub fn new_node_id( & self ) -> usize {
         self.nodes.len()
     }
@@ -66,16 +76,6 @@ impl <TS,TC,TObs> RRT_Base<TS,TC,TObs> where TS: States, TC: Control, TObs: Stat
 }
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for RRT_Base<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-    fn init( param: & Param<TS,TC,TObs>, obstacles: Bvh<usize>, obstacles_concrete: ParamObstacles<TObs> ) -> Self {
-        //todo process obstacles...
-        
-        Self {
-            param: param.clone(),
-            obstacles: obstacles,
-            nodes: vec![ Node { id: 0, state: param.states_init.clone(), children: HashSet::new() } ],
-            edges: HashMap::new(),
-        }
-    }
 
     fn reset( & mut self ){
 

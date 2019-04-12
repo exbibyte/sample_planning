@@ -60,3 +60,36 @@ impl<T,C,TObs> fmt::Display for Param <T, C, TObs> where T: States, C: Control, 
             .finish()
     }
 }
+
+
+#[derive(Clone,Debug)]
+pub struct ParamTree {
+    pub delta_v: f32,
+    pub delta_s: f32,
+    pub prop_delta_low: f32,
+    pub prop_delta_high: f32,
+}
+
+impl Default for ParamTree {
+    fn default() -> Self {
+        ParamTree {
+            delta_v: 0.01,
+            delta_s: 0.001,
+            prop_delta_low: 0.15,
+            prop_delta_high: 1.,
+        }       
+    }
+}
+
+impl fmt::Display for ParamTree {
+   
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        
+        f.debug_struct("ParamTree")
+            .field("delta_v", &format!("{:?}",&self.delta_v) )
+            .field("delta_s", &format!("{:?}",&self.delta_s) )
+            .field("prop_delta_low", &format!("{:?}",&self.prop_delta_low) )
+            .field("prop_delta_high", &format!("{:?}",&self.prop_delta_high) )
+            .finish()
+    }
+}
