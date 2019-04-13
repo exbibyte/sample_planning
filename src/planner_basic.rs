@@ -41,6 +41,8 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     witness_pairs: Vec<(TObs,TObs)>,
     fini: bool,
     rrt_tree: sst::SST<TS,TC,TObs>,
+
+    trajectory_mo_prim_candidates: Vec<(TObs,TObs)>,
 }
 
 impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -83,6 +85,8 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
                                        obs_tree, //contains proxy to obstacles
                                        param_obs, //contains actual obstacles
                                        param_tree ),
+
+            trajectory_mo_prim_candidates: vec![],
         }
     }
 }
@@ -111,11 +115,15 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
             self.trajectory_edge = self.rrt_tree.get_trajectory_edges_config_space();
             self.trajectory_best = self.rrt_tree.get_best_trajectory_config_space();
             self.witness_pairs = self.rrt_tree.get_witness_representatives_config_space();
-
+            self.trajectory_mo_prim_candidates = self.rrt_tree.get_last_motion_prim_candidates();
         }
 
         changed
     }
+    fn get_trajectories_mo_prim_candidates( & self ) -> &[(TObs,TObs)] {
+        self.trajectory_mo_prim_candidates.as_ref()
+    }
+
     fn get_trajectories( & self ) -> &[TObs] {
         self.trajectory.as_ref()
     }

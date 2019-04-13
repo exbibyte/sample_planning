@@ -130,7 +130,7 @@ pub fn sampler_parameter_space( delta: f32 ) -> Control1D {
     let val: f32 = SmallRng::from_entropy().sample(Standard);
     
     // Control1D( [ (rng.gen_range(-1., 1.)*20./180.* PI )/delta ] )
-    Control1D( [ ( 2. * (val-0.5) * 30./180.* PI )/delta ] )
+    Control1D( [ ( 2. * (val-0.5) * 40./180.* PI )/delta ] )
 }
 
 pub fn sampler_state_space() -> States3D {
@@ -148,9 +148,7 @@ pub fn sampler_state_space() -> States3D {
 pub fn stop_cond( system_states: States3D, states_config: States3D, states_config_goal: States3D )-> bool {
     states_config.0.iter()
         .zip( states_config_goal.0.iter() ).take(2)
-    // .all( |x| ((x.0)-(x.1)).abs() < 0.002 )
-    .all( |x| ((x.0)-(x.1)).abs() < 0.0075 )
-    // config_space_distance(states_config, states_config_goal) < 0.001
+        .all( |x| ((x.0)-(x.1)).abs() < 0.005 )
 }
 
 ///estimate of closeness to goal condition in configuration space
@@ -166,23 +164,26 @@ pub fn config_space_distance( states_config: States3D, states_config_goal: State
 
     //todo: check reference on suitable metric for rigid body orientation
     
-    for i in 0..3{
+    for i in 0..2{
         ret += (va[i] - vb[i])*(va[i] - vb[i]);
     }
 
-    // let angle = (va[2] - vb[2]);
+    ret = ret.sqrt();
     
-    // let angle_1 = (va[2] + 2.*PI)%(2.*PI);
-    // let angle_2 = (vb[2] + 2.*PI)%(2.*PI);
-    // ret += (angle_1-angle_2)*(angle_1-angle_2);
+    let angle = (va[2] - vb[2]);
+    
+    let angle_1 = ((va[2] + 2.*PI)%(2.*PI))/(2.*PI);
+    let angle_2 = ((vb[2] + 2.*PI)%(2.*PI))/(2.*PI);
+    ret += ((angle_1-angle_2)*(angle_1-angle_2)).sqrt();
 
     ret
 }
 
 ///generate a possible state space valuation that satisfies the goal
-pub fn statespace_goal_generator() -> States3D {
-    //in this just case, just use the same value as configuration goal state since they map 1:1 with state space
-    config_space_goal
+pub fn statespace_goal_generator( config_state_goal: States3D ) -> States3D {
+    //in this just case, just use the same value as 2D configuration goal with rotation set to 0
+    let v = config_state_goal.get_vals();
+    States3D( [v[0], v[1], 0.] )
 }
 
 pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {

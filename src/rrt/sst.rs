@@ -111,6 +111,8 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub stat_time_mo_prim_query: f64,
     pub stat_time_witness_nn_query: f64,
     pub stat_time_main_prop_check: f64,
+
+    pub last_moprim_candidates: Vec<(TObs,TObs)>,
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -175,6 +177,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             stat_time_mo_prim_query: 0.,
             stat_time_witness_nn_query: 0.,
             stat_time_main_prop_check: 0.,
+
+            last_moprim_candidates: vec![],
         }
     }
 
@@ -219,6 +223,10 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         (self.param.stop_cond)( states, config_states, self.param.states_config_goal.clone() )
     }
 
+    pub fn get_last_motion_prim_candidates( & mut self ) -> Vec<(TObs,TObs)>{
+        self.last_moprim_candidates.clone()
+    }
+    
     fn prune_nodes( & mut self, node_inactive: usize ){
         
         //remove leaf nodes and branches from propagation tree if possible
@@ -325,19 +333,20 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
         let mut timer = Timer::default();
         
-        let rand_prob : f32 = SmallRng::from_entropy().sample(Standard);
+        if self.mo_prim.lookup.len() >= 500 {
 
-        if self.mo_prim.lookup.len() >= 750 && rand_prob > 0.0 {
+            let cost_threshold = if cfg!(feature="mo_prim_thresh_low"){ 0.1 }
+                                 else if cfg!(feature="mo_prim_thresh_high"){ 0.4 }
+                                 else { 0.25 };
+
             
             let d = (self.param.cs_metric)( config_space_coord_before.clone(), self.param.states_config_goal.clone() );
             
-            if d < 2. {
+            if d < cost_threshold {
 
                 //try using motion primitive to propagate towards goal
                 
-                let q_query_mo_prim = (self.param.ss_goal_gen)(); //get a possible state space value that fulfills goal
-
-                let cost_threshold :f32 = 0.2; // todo: determine this
+                let q_query_mo_prim = (self.param.ss_goal_gen)( self.param.states_config_goal.clone() ); //get a possible state space value that fulfills goal
                 
                 let motions : Vec<Motion<_,_>> = self.mo_prim.query_motion( state_space_nearest.clone(),
                                                                             q_query_mo_prim,
@@ -346,7 +355,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                 let start_point = &config_space_coord_before;
 
                 //test for obstable collision for candidate motions
-                let sel_motion = motions.iter().filter(|m|{
+                let sel_motion = motions.iter().filter_map(|m|{
                     let control = m.u.clone();
                     let time_dur = m.t.clone();
                     
@@ -357,15 +366,27 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                     let end_point = (self.param.project_state_to_config)(propagate_motion.clone());
 
                     let collision = self.collision_check( &start_point, &end_point );
-
-                    let d_diff = (self.param.cs_metric)( end_point, self.param.states_config_goal.clone() );
+                        
+                    let d_diff = (self.param.cs_metric)( end_point.clone(), self.param.states_config_goal.clone() );
                     
-                    if collision || d_diff > d { false } else { true }
+                    if collision || d_diff > d {
+                        None
+                    } else {
+                        #[cfg(feature="mo_prim_debug")]
+                        {
+                            self.last_moprim_candidates.push( (start_point.clone(),
+                                                               end_point.clone()) ); //debugging purpose
+                        }
+                        
+                        Some( (d_diff,m) )
+                    }
 
-                }).min_by(|a,b| a.c.partial_cmp( &b.c ).unwrap_or(Ordering::Equal) ); //select feasible and efficient motion with respect to cost
+                });
 
-                match sel_motion {
-                    Some(Motion{u,t,..}) => {
+                let motion = sel_motion.min_by(|a,b| a.0.partial_cmp( &b.0 ).unwrap_or(Ordering::Equal) );
+                
+                match motion {
+                    Some((d,Motion{u,t,..})) => {
                         return Some(( *t, u.clone() ))
                     },
                     _ => {},
@@ -424,10 +445,13 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.stat_time_witness_nn_query = 0.;
         self.stat_time_main_prop_check = 0.;
         self.stat_time_all = 0.;
+        self.last_moprim_candidates = vec![];
     }
     
     fn iterate( & mut self, iteration: Option<u32> ) -> bool {
 
+        let mut rng = rand::thread_rng();
+        
         if self.idx_reached.is_some() || self.iter_exec >= self.param.iterations_bound {
             return false
         }
@@ -461,15 +485,21 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = {
                 #[cfg(feature="motion_primitives")]
                 {
-                    match self.try_motion_primitive_control( state_start.clone(), config_space_coord_before.clone() ) {
-                        Some((t, u)) => {
-                            //replace monte carlo propagation time and random control sample with the one from motion primitive
-                            ( t, u, true )
-                        },
-                        _ => {
-                            let ( t, u ) = self.generate_monte_carlo_propagation();
-                            ( t, u, false )
-                        },
+                    let rand_prob = rng.gen_range(0., 1.);
+                    if rand_prob > 0.5 {
+                        match self.try_motion_primitive_control( state_start.clone(), config_space_coord_before.clone() ) {
+                            Some((t, u)) => {
+                                //replace monte carlo propagation time and random control sample with the one from motion primitive
+                                ( t, u, true )
+                            },
+                            _ => {
+                                let ( t, u ) = self.generate_monte_carlo_propagation();
+                                ( t, u, false )
+                            },
+                        }
+                    } else {
+                        let ( t, u ) = self.generate_monte_carlo_propagation();
+                        ( t, u, false )
                     }
                 }
                 #[cfg(not(feature="motion_primitives"))]
@@ -487,9 +517,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             #[cfg(feature="motion_primitives")]
             {
-                let mut rng = rand::thread_rng();
                 let rand_prob = rng.gen_range(0., 1.);
-                if rand_prob > 0.65 || self.mo_prim.lookup.len() < self.mo_prim.capacity {
+                if rand_prob > 0.85 || self.mo_prim.lookup.len() < self.mo_prim.capacity {
                     //no matter what obstructions are out there, we can still record the motion
                     self.mo_prim.add_motion( state_start,
                                              state_propagate.clone(),
@@ -601,6 +630,10 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     break;
                 },
                 _ => {},
+            }
+
+            if is_using_motion_prim {
+                return true
             }
         }
 

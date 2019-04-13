@@ -8,7 +8,8 @@ extern crate pretty_env_logger;
 
 use std::env;
 use std::collections::HashMap;
-
+use std::io::{stdin};
+              
 mod instrumentation;
 mod planner_param;
 mod planner;
@@ -396,7 +397,7 @@ fn main() {
         };
         
         let mut handle = g2.add_trimesh( map_custom_mesh.unwrap(), Vector3::new( 1./scale, 1./scale, 1.) );
-        handle.set_color(0.3, 0.3, 0.3);
+        handle.set_color(0.93, 0.93, 0.75);
     } else {
         
         let mut g1 = window.add_group();
@@ -464,6 +465,21 @@ fn main() {
                   Point3::new(b[0],b[1],b[2]) )
             })
             .collect();
+
+        let mo_prim_candidates : Vec<(Point3<f32>,Point3<f32>)> = pl.get_trajectories_mo_prim_candidates().iter()
+            .map(|x| {
+                let a = (x.0).0;
+                let b = (x.1).0;
+                ( Point3::new(a[0],a[1],a[2]),
+                  Point3::new(b[0],b[1],b[2]) )
+            })
+            .collect();
+
+        //draw
+        mo_prim_candidates.iter()
+            .for_each(|x| {
+                window.draw_line( &x.0, &x.1, &Point3::new(0.9,1.0,0.0) );
+            } );
         
         coords.iter()
             .for_each(|x| {
@@ -481,7 +497,7 @@ fn main() {
                 if x.1 == 0 { 
                     window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(1.,0.,0.) );
                 } else {
-                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(1.,1.,0.) );
+                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(0.,1.,0.) );
                 }
             } );
             
@@ -522,5 +538,10 @@ fn main() {
                 c.append_translation( &Translation3::new( b.0, b.1, b.2 ) );
                 c.set_color(0.8, 0.8, 0.);
             });
+
+        // if changed {
+        //     let mut dummy = String::new();
+        //     stdin().read_line(&mut dummy);
+        // }
     }
 }

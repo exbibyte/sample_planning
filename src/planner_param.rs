@@ -33,7 +33,7 @@ pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
     pub motion_primitive_xform: Option<fn(T,T)->T>,
     pub motion_primitive_xform_inv: Option<fn(T,T)->T>,
 
-    pub ss_goal_gen: fn()->T,
+    pub ss_goal_gen: fn(TObs)->T,
 }
 
 #[derive(Clone,Debug)]

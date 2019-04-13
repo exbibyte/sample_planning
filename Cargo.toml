@@ -26,6 +26,9 @@ serde_json = "1.0"
 motion_primitives = []
 runge_kutta = []
 disable_pruning = []
+mo_prim_debug = []
+mo_prim_thresh_low = []
+mo_prim_thresh_high = []
 
 [[bin]]
 name = "planner"
