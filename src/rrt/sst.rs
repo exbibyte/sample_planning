@@ -110,6 +110,7 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub stat_time_all: f64,
     pub stat_time_mo_prim_query: f64,
     pub stat_time_witness_nn_query: f64,
+    pub stat_time_vicinity_best_nn_query: f64,
     pub stat_time_main_prop_check: f64,
 
     pub last_moprim_candidates: Vec<(TObs,TObs)>,
@@ -176,6 +177,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             stat_time_all: 0.,
             stat_time_mo_prim_query: 0.,
             stat_time_witness_nn_query: 0.,
+            stat_time_vicinity_best_nn_query: 0.,
             stat_time_main_prop_check: 0.,
 
             last_moprim_candidates: vec![],
@@ -443,6 +445,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.idx_reached = None;
         self.stat_time_mo_prim_query = 0.;
         self.stat_time_witness_nn_query = 0.;
+        self.stat_time_vicinity_best_nn_query = 0.;
         self.stat_time_main_prop_check = 0.;
         self.stat_time_all = 0.;
         self.last_moprim_candidates = vec![];
@@ -471,6 +474,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             
             let ss_sample = (self.param.ss_sampler)(); //sampler for state space
 
+            let mut timer_nn = Timer::default();
+            
             //get best active state in vicinity delta_v of ss_sample, or return nearest active state
             let idx_state_best_nearest = self.nn_query.query_nearest_state_active( ss_sample.clone(),
                                                                                    & self.nodes,
@@ -478,6 +483,9 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                                                                    & self.param,
                                                                                    self.delta_v );
 
+            let t_delta_nn = timer_nn.dur_ms();
+            self.stat_time_vicinity_best_nn_query += t_delta_nn;
+            
             let state_start = self.nodes[idx_state_best_nearest].state.clone();
             let config_space_coord_before = (self.param.project_state_to_config)(state_start.clone());
             
@@ -697,6 +705,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
         info!( "stat_time_mo_prim_query: {} ms / {}%", self.stat_time_mo_prim_query, self.stat_time_mo_prim_query / self.stat_time_all * 100. );
         info!( "stat_time_witness_nn_query: {} ms / {}%", self.stat_time_witness_nn_query, self.stat_time_witness_nn_query / self.stat_time_all * 100. );
+        info!( "stat_time_vicinity_best_nn_query: {} ms / {}%", self.stat_time_vicinity_best_nn_query, self.stat_time_vicinity_best_nn_query / self.stat_time_all * 100. );
         info!( "stat_time_main_prop_check: {} ms / {}%", self.stat_time_main_prop_check, self.stat_time_main_prop_check / self.stat_time_all * 100. );
         
         #[cfg(feature="motion_primitives")]
