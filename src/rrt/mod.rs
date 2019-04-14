@@ -5,6 +5,7 @@ pub mod rrt;
 pub mod rrt_base;
 pub mod sst;
 pub mod nn_naive;
+pub mod nn_stochastic;
 
 // pub mod rrt_star;
 // pub mod rrt_sparse;
