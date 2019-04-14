@@ -2,6 +2,7 @@ extern crate pretty_env_logger;
 
 use std::collections::{HashSet,HashMap};
 use std::marker::PhantomData;
+use std::cmp::Ordering;
 
 use rand::Rng;
 
@@ -32,7 +33,7 @@ impl<TS,TC,TObs> NN_Naive<TS,TC,TObs> where TS: States, TC: Control, TObs: State
         let node_best = nodes_active.iter()
             .map(|x| &ns[*x] )
             .filter(|x| (param.ss_metric)( x.state.clone(), sample_state.clone() ) < delta_v )
-            .min_by_key(|x| x.cost );
+            .min_by(|a,b| a.cost.partial_cmp( &b.cost ).unwrap_or(Ordering::Equal) );
 
         match node_best {
             Some(x) => { //non-empty
@@ -41,7 +42,7 @@ impl<TS,TC,TObs> NN_Naive<TS,TC,TObs> where TS: States, TC: Control, TObs: State
             _ => { //else consider nearest one
                 let node_nearest = nodes_active.iter()
                     .map(|x| &ns[*x] )
-                    .min_by_key(|x| x.cost ).expect("no nodes active");
+                    .min_by(|a,b| a.cost.partial_cmp( &b.cost ).unwrap_or(Ordering::Equal) ).expect("no nodes active");
                 node_nearest.id
             },
         }

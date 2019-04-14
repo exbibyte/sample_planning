@@ -49,7 +49,7 @@ pub struct Node<TS> {
     pub children: HashSet<(usize)>,
     
     ///cost in terms of number of steps from the root of the propagation tree
-    pub cost: u32,
+    pub cost: f32,
 }
 
 pub struct Edge <TC> {
@@ -135,7 +135,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             nodes: vec![ Node { id: 0,
                                 state: param.states_init.clone(),
                                 children: HashSet::new(),
-                                cost: 0 } ],
+                                cost: 0. } ],
 
             nodes_freelist: vec![],
             witnesses: vec![ param.states_init.clone() ],
@@ -262,7 +262,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                       idx_node_nearest: usize,
                       state_propagate: TS,
                       control_propagate: TC,
-                      propagation_cost: u32,
+                      propagation_cost: f32,
                       is_using_motion_prim: bool ) -> usize {
         
         //use freelist if possible
@@ -426,7 +426,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.nodes = vec![ Node { id: 0,
                                   state: self.param.states_init.clone(),
                                   children: HashSet::new(),
-                                  cost: 0 } ];
+                                  cost: 0. } ];
 
         self.edges = HashMap::new();
         self.witnesses = vec![ self.param.states_init.clone() ];
@@ -478,7 +478,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                                                                    & self.param,
                                                                                    self.delta_v );
 
-            let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + 1;
             let state_start = self.nodes[idx_state_best_nearest].state.clone();
             let config_space_coord_before = (self.param.project_state_to_config)(state_start.clone());
             
@@ -508,7 +507,9 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     ( t, u, false )
                 }
             };
-            
+
+            let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + monte_carlo_prop_delta;
+
             let state_propagate = (self.param.dynamics)( state_start.clone(),
                                                          param_sample.clone(),
                                                          monte_carlo_prop_delta );
