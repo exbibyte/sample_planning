@@ -48,7 +48,7 @@ use kiss3d::camera::*;
 extern crate ncollide3d;
 use ncollide3d::procedural::{TriMesh,IndexBuffer};
 
-use rrt::{kdtree, rrt::RRT};
+use rrt::rrt::RRT;
 
 extern crate clap;
 use clap::{Arg, App, SubCommand};
