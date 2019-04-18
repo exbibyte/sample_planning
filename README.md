@@ -23,23 +23,38 @@ Inputs to program
   - [TODO] a better nearest neighbour query with runtime add/deletion
   
 # Running Planner
-* build and run in release mode with: cargo run --release --bin planner --  -p <problem_instance_name> (see src/prob_instances.rs)
+* build and run in release mode with:
+  * cargo run --release --bin planner -- -p <problem_instance_name> (see src/prob_instances.rs)
+  * cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path>
 * required arguments:
-  * -o \<file_obstacle>: obstacle file path (eg: -o obstacles/obs1.txt)
-  * -e \<.ele file path> -n \<.node file path> (see custom maps section)
-  * -p \<problem instance name> (eg: -p ob3 ), see prob_instances.rs for predefined list
+  * Either:
+    * -p \<problem instance name> (eg: -p obs3 ), see prob_instances.rs for predefined problem domain list
+  * Or one of:
+    * -o \<file_obstacle>: obstacle file path (eg: -o obstacles/obs2.txt)
+    * -e \<.ele file path> -n \<.node file path> (see custom maps section)
 * optional arguments:
   * -w: show witness node and witness representative pairs
       * drawn as a line(red) with end points (purple: witness), (blue: witness representative)
   * -i \<N>: max iterations
   * -m \<model>: model selection, defaults to dubins
-      * \<model> variants: dubins
-  * -o \<file_obstacle>
-  * -e \<.ele file path> -n \<.node file path>
-  * -b \<N>: batch iterations for rendering
+      * \<model> variants:
+      	* dubins
+	* airplane (TODO)
+  * -b \<N>: batch N iterations in between rendering calls
   * -h: help
+* optional compile-time features:
+  * usage:
+    * cargo run --release --bin planner --features nn_naive,disable_pruning,(other features...) -- -p <<problem_instance_name> (other program arguments)...
+  * variants:
+    * motion_primitives (enables motion_primitive)
+    * runge_kutta (alternative RK4 propagation method, default is Euler)
+    * disable_pruning (make the propagation tree non-sparse)
+    * nn_naive (use linear search for nearest neighbour query)
+    * nn_sample_log (use logarithmic number of stochastic samples for nn query, must not have nn_naive to have effect, defaults to square root number of stochastic samples)
+    * mo_prim_debug (render all candidates for motion primitives)
+    * mo_prim_thresh_low/high (low and high neighbourhood threshold for motion primitive activation)
 
-# Running Obstacle Generator
+# Generating Random Obstacles
 * build and run in release mode with: cargo run --release --bin gen_obs -- -f \<output_file_path>
 * required arguments:
   * -f \<output_file_path> (eg: cargo run --release --bin gen_obs -- -f obstacles/obs99.txt)
@@ -50,14 +65,16 @@ Inputs to program
 # Using custom maps
 * a set of maps that is mainly used for benchmarking purposes obtainable from https://www.movingai.com/benchmarks/grids.html can be used, these are located in the /maps_custom folder
 * character movable space within a map are triangulated for use in the planner as the configuration free space
-* triangulation is done using Triangle software from http://www.cs.cmu.edu/~quake/triangle.html
+* triangulation is done using the awesome Triangle software from http://www.cs.cmu.edu/~quake/triangle.html
 * the maps are converted into a format for Triangle to process and output is loadable into our planner, these intermediate files are stored at /maps_custom/<game>/poly
-* some maps might have bad triangulation not useable for the planner
-* build and run in release mode with: cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path> -p \<problem_instance_name>
-  * (eg: cargo run --release --bin planner -- -e maps_custom/dragon_age/poly/ost100d.1.ele -n maps_custom/dragon_age/poly/ost100d.1.node -p ost100d -i 500000
-* required arguments:
-  * -e \<.ele file path>
-  * -n \<.node file path>
+* some maps might have bad triangulation not useable for the planner (I aimed for working with Dragon Age maps)
+* generating intermediate files and actualy map assets for planner:
+  * run ./script_map2poly.sh (generates format for Triangle)
+  * run ./script_triangulate_poly.sh (outputs 2D triangulation result as .ele and .node files)
+* build and run planner with custom maps in release mode:
+  * cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path>
+    * (eg: cargo run --release --bin planner -- -e maps_custom/dragon_age/poly/ost100d.1.ele -n maps_custom/dragon_age/poly/ost100d.1.node -p ost100d -i 500000
+  * cargo run --release --bin planner -- -p \<problem_instance_name> (see src/prob_instances.rs)
 
 # Screenshots
 
