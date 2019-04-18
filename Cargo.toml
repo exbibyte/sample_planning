@@ -29,6 +29,8 @@ disable_pruning = []
 mo_prim_debug = []
 mo_prim_thresh_low = []
 mo_prim_thresh_high = []
+nn_sample_log = []
+nn_naive = []
 
 [[bin]]
 name = "planner"

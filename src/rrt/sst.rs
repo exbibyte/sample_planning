@@ -1,4 +1,5 @@
 //! Stable Sparse RRT
+//! Based on Asymptotically Optimal Sampling-Based Kinodynnamic Planning paper
 
 extern crate pretty_env_logger;
 
@@ -19,6 +20,7 @@ use crate::moprim::{MoPrim,Motion};
 use crate::instrumentation::*;
 
 use super::nn_naive::NN_Naive;
+use super::nn_stochastic::NN_Stochastic;
 
 use zpatial::implement::bvh_median::Bvh;
 use zpatial::interface::i_spatial_accel::ISpatialAccel;
@@ -68,9 +70,12 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
     pub obstacles_actual: ParamObstacles<TObs>,
 
-    pub nodes: Vec< Node<TS> >,
     pub witnesses: Vec<TS>,
+
+    ///maps witness to indices in nodes
     pub witness_representative: HashMap< usize, usize >,
+    
+    pub nodes: Vec< Node<TS> >,
     
     ///free slots in nodes for future node initialization
     pub nodes_freelist: Vec<usize>,
@@ -88,7 +93,16 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub monte_carlo_prop_l: f32,
     pub monte_carlo_prop_h: f32,
 
-    pub nn_query: NN_Naive<TS,TC,TObs>,
+    #[cfg(feature="nn_naive")]    
+    pub nn_query_brute: NN_Naive<TS,TC,TObs>,
+
+    #[cfg(not(feature="nn_naive"))]
+    ///stores nodes
+    pub nn_query: NN_Stochastic<TS,TC,TObs>,
+
+    #[cfg(not(feature="nn_naive"))]
+    ///stores only witnesses
+    pub nn_query_witness: NN_Stochastic<TS,TC,TObs>,
 
     pub stat_pruned_nodes: u32,
     pub stat_iter_no_change: u32,
@@ -113,6 +127,9 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub stat_time_vicinity_best_nn_query: f64,
     pub stat_time_main_prop_check: f64,
 
+    pub stat_count_nn_witness_queries: u64,
+    pub stat_count_nn_node_queries: u64,
+    
     pub last_moprim_candidates: Vec<(TObs,TObs)>,
 }
 
@@ -126,7 +143,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             _ => false
         };
         
-        Self {
+        let mut s = Self {
             
             are_obstacles_boxes: box_obstacles,
             
@@ -139,8 +156,10 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                                 cost: 0. } ],
 
             nodes_freelist: vec![],
-            witnesses: vec![ param.states_init.clone() ],
+            
+            witnesses: vec![],
             witness_representative: HashMap::new(),
+            
             edges: HashMap::new(),
             
             delta_v: param_tree.delta_v,
@@ -152,11 +171,18 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             nodes_inactive: HashSet::new(),
             link_parent: HashMap::new(),
 
-            nn_query: NN_Naive {
+            #[cfg(feature="nn_naive")]
+            nn_query_brute: NN_Naive {
                 phantom_ts: PhantomData,
                 phantom_tc: PhantomData,
                 phantom_tobs: PhantomData,
             },
+
+            #[cfg(not(feature="nn_naive"))]
+            nn_query: NN_Stochastic::default(),
+            
+            #[cfg(not(feature="nn_naive"))]
+            nn_query_witness: NN_Stochastic::default(),
 
             stat_pruned_nodes: 0,
             stat_iter_no_change: 0,
@@ -180,8 +206,20 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             stat_time_vicinity_best_nn_query: 0.,
             stat_time_main_prop_check: 0.,
 
+            stat_count_nn_witness_queries: 0,
+            stat_count_nn_node_queries: 0,
+                
             last_moprim_candidates: vec![],
+        };
+
+        #[cfg(not(feature="nn_naive"))]
+        {
+            s.create_new_witness( param.states_init.clone() );
+            s.add_propagated_state_to_nn_query( param.states_init.clone(), 0 );
         }
+        
+        s.witness_representative.insert( 0, 0 );        
+        s
     }
 
     pub fn get_trajectory_config_space( & self ) -> Vec<TObs> {
@@ -240,6 +278,13 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                     
                     self.nodes_inactive.remove( & node_prune );
                     self.nodes_freelist.push( node_prune );
+
+                    #[cfg(not(feature="nn_naive"))]
+                    {
+                        //remove node from nn_query
+                        self.nn_query.remove( node_prune );
+                    }
+                    
                     let parent_idx = match self.link_parent.get( & node_prune ){
                         Some(par) => { *par },
                         _ => {
@@ -250,7 +295,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                     self.edges.remove( &(parent_idx, node_prune) );
                     self.nodes[ parent_idx ].children.remove( & node_prune );
                     node_prune = parent_idx;
-
+                        
                     self.stat_pruned_nodes += 1;
                     
                 } else {
@@ -419,6 +464,24 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
         ( monte_carlo_prop_delta, control_sample )
     }
+
+    #[cfg(not(feature="nn_naive"))]
+    fn create_new_witness( & mut self, state: TS ) -> usize {
+
+        let idx_new = self.witnesses.len();
+        
+        self.witnesses.push( state.clone() );
+        
+        self.nn_query_witness.add( state, idx_new, self.param.ss_metric );
+        
+        idx_new
+    }
+
+    #[cfg(not(feature="nn_naive"))]
+    fn add_propagated_state_to_nn_query( & mut self, state: TS, id: usize ) {
+
+        self.nn_query.add( state, id, self.param.ss_metric );
+    }
 }
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -431,7 +494,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                   cost: 0. } ];
 
         self.edges = HashMap::new();
-        self.witnesses = vec![ self.param.states_init.clone() ];
         self.witness_representative.clear();
         self.nodes_active = HashSet::new();
         self.nodes_active.insert( 0 );
@@ -448,7 +510,17 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.stat_time_vicinity_best_nn_query = 0.;
         self.stat_time_main_prop_check = 0.;
         self.stat_time_all = 0.;
+        self.stat_count_nn_witness_queries = 0;
+        self.stat_count_nn_node_queries = 0;
+        
         self.last_moprim_candidates = vec![];
+
+        #[cfg(not(feature="nn_naive"))]
+        {
+            self.create_new_witness( self.param.states_init.clone() );
+            self.add_propagated_state_to_nn_query( self.param.states_init.clone(), 0 );
+        }
+        self.witness_representative.insert( 0, 0 );
     }
     
     fn iterate( & mut self, iteration: Option<u32> ) -> bool {
@@ -458,8 +530,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         if self.idx_reached.is_some() || self.iter_exec >= self.param.iterations_bound {
             return false
         }
-        
-        // self.reset();
 
         let mut timer_all = Timer::default();
 
@@ -475,16 +545,38 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             let ss_sample = (self.param.ss_sampler)(); //sampler for state space
 
             let mut timer_nn = Timer::default();
-            
+
             //get best active state in vicinity delta_v of ss_sample, or return nearest active state
-            let idx_state_best_nearest = self.nn_query.query_nearest_state_active( ss_sample.clone(),
-                                                                                   & self.nodes,
-                                                                                   & self.nodes_active,
-                                                                                   & self.param,
-                                                                                   self.delta_v );
+            
+            let idx_state_best_nearest = {
+                #[cfg(feature="nn_naive")]
+                {
+                    let idx_ret = self.nn_query_brute.query_nearest_state_active( ss_sample.clone(),
+                                                                                  & self.nodes,
+                                                                                  & self.nodes_active,
+                                                                                  & self.param,
+                                                                                  self.delta_v );
+                    idx_ret
+                }
+                #[cfg(not(feature="nn_naive"))]
+                {
+                    let mut ret = self.nn_query.query_nearest_threshold( ss_sample.clone(),
+                                                                         self.param.ss_metric,
+                                                                         self.delta_v );
+                    if ret.is_empty(){
+                        ret = self.nn_query.query_nearest_k( ss_sample.clone(),
+                                                             self.param.ss_metric,
+                                                             1 );
+                    }
+                    
+                    let (_,idx_ret) = *ret.iter().nth(0).expect("nn query failed to return a node");
+                    idx_ret
+                }
+            };
 
             let t_delta_nn = timer_nn.dur_ms();
             self.stat_time_vicinity_best_nn_query += t_delta_nn;
+            self.stat_count_nn_node_queries += 1;
             
             let state_start = self.nodes[idx_state_best_nearest].state.clone();
             let config_space_coord_before = (self.param.project_state_to_config)(state_start.clone());
@@ -539,22 +631,48 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             }
 
             let mut timer = Timer::default();
-            
-            let witness_idx = match self.nn_query.query_nearest_witness( state_propagate.clone(),
-                                                                         & self.witnesses, 
-                                                                         & self.param,
-                                                                         self.delta_s ) {
-                Some(idx) => { idx },
-                _ => {
-                    //no witness found within delta_s vicinity, so create a new witness
-                    let idx_new = self.witnesses.len();
-                    self.witnesses.push( state_propagate.clone() );
-                    idx_new
-                },
-            };
 
+            //get the witness node in the sampled neighbourhood
+            
+            let witness_idx = {
+                #[cfg(feature="nn_naive")]
+                {
+                    match self.nn_query_brute.query_nearest_witness( state_propagate.clone(),
+                                                                     & self.witnesses, 
+                                                                     & self.param,
+                                                                     self.delta_s ) {
+                        Some(idx) => { idx },
+                        _ => {
+                            //no witness found within delta_s vicinity, so create a new witness
+                            let idx_new = self.witnesses.len();
+                            self.witnesses.push( state_propagate.clone() );
+                            idx_new
+                        },
+                    }
+                }
+                #[cfg(not(feature="nn_naive"))]
+                {
+                    let ret = self.nn_query_witness.query_nearest_threshold( state_propagate.clone(),
+                                                                             self.param.ss_metric,
+                                                                             self.delta_s );
+                    let witness_idx = match ret.iter().nth(0) {
+                        Some((_,idx_global)) => {
+                            //found witness
+                            *idx_global
+                        },
+                        _ => {
+                            //no witness found within delta_s vicinity, so create a new witness
+                            let idx_new = self.create_new_witness( state_propagate.clone() );
+                            idx_new
+                        },
+                    };
+                    witness_idx
+                }
+            };
+                
             let t_delta = timer.dur_ms();
             self.stat_time_witness_nn_query += t_delta;
+            self.stat_count_nn_witness_queries += 1;
 
             let reached = self.reached_goal( state_propagate.clone() );
             
@@ -562,11 +680,12 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                 Some(x) => { Some(*x) },
                 _ => None,
             };
-
+            
             let mut timer2 = Timer::default();
             
             let idx_node = match witness_repr {
                 Some( repr ) => {
+                    
                     if state_propagate_cost < self.nodes[ repr ].cost || reached {
 
                         if self.collision_check( &config_space_coord_before, &config_space_coord_after ) {
@@ -582,17 +701,23 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                                                  is_using_motion_prim );
 
                             let node_inactive = repr;
-
+                            
                             #[cfg(not(feature="disable_pruning"))]
                             {
                                 self.inactivate_node( node_inactive.clone() );
                                 
                                 //remove leaf nodes and branches from propagation tree if possible
-                                self.prune_nodes( node_inactive );
+                                self.prune_nodes( node_inactive ); //remove states from nn query as well
                             }
                             //save new representative state idx for current witness
                             *self.witness_representative.get_mut( &witness_idx ).unwrap() = idx_inserted;
 
+                            #[cfg(not(feature="nn_naive"))]
+                            {
+                                //add propagated state to nn_query
+                                self.add_propagated_state_to_nn_query( state_propagate.clone(), idx_inserted );
+                            }
+                            
                             #[cfg(feature="motion_primitives")]
                             {
                                 if is_using_motion_prim {
@@ -621,6 +746,13 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                                                              is_using_motion_prim );
 
                         self.witness_representative.insert( witness_idx, idx_inserted ); //save new representative state idx for current witness
+
+                        #[cfg(not(feature="nn_naive"))]
+                        {
+                            //add propagated state to nn_query
+                            self.add_propagated_state_to_nn_query( state_propagate.clone(), idx_inserted );
+                        }
+                        
                         //no node is made inactive, hence no pruning necessary
                         Some(idx_inserted)
                     }
@@ -633,22 +765,13 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             match (idx_node, self.reached_goal( state_propagate ) ) {
                 (Some(x),true) => {
                     let d_goal = (self.param.cs_metric)( config_space_coord_after.clone(), self.param.states_config_goal.clone() );
-                    info!("found a path to goal on iteration: {}, diff: {}", i, d_goal );
-                    // self.iter_exec = i;
+                    info!("found a path to goal on iteration: {}, diff: {}", self.iter_exec, d_goal );
                     self.idx_reached = Some(x);
                     break;
                 },
                 _ => {},
             }
-
-            if is_using_motion_prim {
-                return true
-            }
         }
-
-        // if self.idx_reached.is_none() {
-        //     self.iter_exec += iter_batch;
-        // }
         
         let t_delta_all = timer_all.dur_ms();
         self.stat_time_all += t_delta_all;
@@ -704,8 +827,17 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         info!( "iterations collision: {}/{}, {:.2}%", self.stat_iter_collision, self.iter_exec, self.stat_iter_collision as f32/self.iter_exec as f32 * 100. );
 
         info!( "stat_time_mo_prim_query: {} ms / {}%", self.stat_time_mo_prim_query, self.stat_time_mo_prim_query / self.stat_time_all * 100. );
-        info!( "stat_time_witness_nn_query: {} ms / {}%", self.stat_time_witness_nn_query, self.stat_time_witness_nn_query / self.stat_time_all * 100. );
-        info!( "stat_time_vicinity_best_nn_query: {} ms / {}%", self.stat_time_vicinity_best_nn_query, self.stat_time_vicinity_best_nn_query / self.stat_time_all * 100. );
+        
+        info!( "stat_time_witness_nn_query: {} ms / {}% / {}ms/query",
+                self.stat_time_witness_nn_query,
+                self.stat_time_witness_nn_query / self.stat_time_all * 100.,
+                self.stat_time_witness_nn_query / self.stat_count_nn_witness_queries as f64 );
+        
+        info!( "stat_time_vicinity_best_nn_query: {} ms / {}% / {}ms/query",
+                self.stat_time_vicinity_best_nn_query,
+                self.stat_time_vicinity_best_nn_query / self.stat_time_all * 100.,
+                self.stat_time_vicinity_best_nn_query / self.stat_count_nn_node_queries as f64 );
+        
         info!( "stat_time_main_prop_check: {} ms / {}%", self.stat_time_main_prop_check, self.stat_time_main_prop_check / self.stat_time_all * 100. );
         
         #[cfg(feature="motion_primitives")]
