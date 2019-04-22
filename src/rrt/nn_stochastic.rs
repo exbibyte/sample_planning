@@ -435,7 +435,34 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
         arr
     }
 
-    pub fn print_stats(&self) {
+    pub fn query_dist_node_neighbourhood_avg( & self,
+                                                state_query: TS,
+                                                node_idx_global: usize,
+                                                f_ss_metric: fn(TS,TS)->f32,
+                                                hop_dist: usize ) -> f32 {
+        
+        let idx_local = *self.nodes_map.get( &node_idx_global ).expect("node does not exit");
+
+        let dist = f_ss_metric( self.nodes[idx_local].clone(), state_query.clone() );
+
+        let d = match self.edges.get( &idx_local ) {
+            Some(x) => {
+                if x.is_empty(){
+                    dist
+                } else {
+                    let d_surround = x.iter()
+                        .fold( 0., |acc,i| acc + f_ss_metric( self.nodes[*i].clone(), state_query.clone() ) );
+                    
+                    ( d_surround + dist ) / ( x.len() + 1 ) as f32
+                }
+            },
+            _ => { dist },
+        };
+        
+        d
+    }
+    
+    pub fn print_stats( & self ) {
         info!( "number of valence fixups: {}", self.stat_valence_fixups );
     }
 }

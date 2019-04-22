@@ -398,14 +398,17 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                                  else if cfg!(feature="mo_prim_thresh_high"){ 0.4 }
                                  else { 0.25 };
 
-            
-            let d = (self.param.cs_metric)( config_space_coord_before.clone(), self.param.states_config_goal.clone() );
+
+            let config_space_goal = (self.param.project_state_to_config)(self.param.states_goal.clone());
+                                                 
+            let d = (self.param.cs_metric)( config_space_coord_before.clone(), config_space_goal.clone() );
+                                            
             
             if d < cost_threshold {
 
                 //try using motion primitive to propagate towards goal
                 
-                let q_query_mo_prim = self.param.states_goal;
+                let q_query_mo_prim = self.param.states_goal.clone();
                 
                 let motions : Vec<Motion<_,_>> = self.mo_prim.query_motion( state_space_nearest.clone(),
                                                                             q_query_mo_prim,
@@ -426,7 +429,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
                     let collision = self.collision_check( &start_point, &end_point );
                         
-                    let d_diff = (self.param.cs_metric)( end_point.clone(), self.param.states_config_goal.clone() );
+                    let d_diff = (self.param.cs_metric)( end_point.clone(), config_space_goal.clone() );
                     
                     if collision || d_diff > d {
                         None
@@ -556,7 +559,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             self.iter_exec += 1;
             
-            let ss_sample = (self.param.ss_sampler)(); //sampler for state space
+            let mut ss_sample = (self.param.ss_sampler)(); //sampler for state space
 
             let mut timer_nn = Timer::default();
 
@@ -574,17 +577,67 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                 }
                 #[cfg(not(feature="nn_naive"))]
                 {
-                    let mut ret = self.nn_query.query_nearest_threshold( ss_sample.clone(),
-                                                                         self.param.ss_metric,
-                                                                         self.delta_v );
-                    if ret.is_empty(){
-                        ret = self.nn_query.query_nearest_k( ss_sample.clone(),
-                                                             self.param.ss_metric,
-                                                             1 );
-                    }
+
+                    let prob_use_state_prop_sample = rng.gen_range(0., 1.);
                     
-                    let (_,idx_ret) = *ret.iter().nth(0).expect("nn query failed to return a node");
-                    idx_ret
+                    if cfg!(feature="state_propagate_sample") && prob_use_state_prop_sample > 0.5 
+                    {
+                        
+                        let ss_samples = (0..5).map( |_| (self.param.ss_sampler)() ).collect::<Vec<_>>();
+                        
+                        let sample_nearest_pairs = ss_samples.into_iter()
+                            .map(|sample|{
+                                let r0 = self.nn_query.query_nearest_threshold( sample.clone(),
+                                                                                self.param.ss_metric,
+                                                                                self.delta_v );
+                                let idx_nearest = if r0.is_empty(){
+                                    let r1 = self.nn_query.query_nearest_k( sample.clone(),
+                                                                            self.param.ss_metric,
+                                                                            1 );
+                                    let (_,idx_ret) = *r1.iter().nth(0).unwrap();
+                                    idx_ret
+                                }else{
+                                    let (_,idx_ret) = *r0.iter().nth(0).unwrap();
+                                    idx_ret
+                                };
+                                
+                                (sample,idx_nearest)
+                            }).collect::<Vec<_>>();
+                        
+                        let (sample_sel,idx_sel) = sample_nearest_pairs.into_iter()
+                            .max_by(|(sample_a,idx_nearest_a),(sample_b,idx_nearest_b)|{
+                                
+                                let dist_a = self.nn_query.query_dist_node_neighbourhood_avg( sample_a.clone(),
+                                                                                              *idx_nearest_a,
+                                                                                              self.param.ss_metric,
+                                                                                              1 );
+
+                                let dist_b = self.nn_query.query_dist_node_neighbourhood_avg( sample_b.clone(),
+                                                                                              *idx_nearest_b,
+                                                                                              self.param.ss_metric,
+                                                                                              1 );
+                                dist_a.partial_cmp( & dist_b ).unwrap_or( Ordering::Equal )
+                            }).unwrap();
+
+                        // info!("idx_sel:{}",idx_sel);
+                        
+                        ss_sample = sample_sel;
+                        idx_sel
+                    }
+                    // #[cfg(not(feature="state_propagate_sample"))]
+                    else {
+                        let mut ret = self.nn_query.query_nearest_threshold( ss_sample.clone(),
+                                                                             self.param.ss_metric,
+                                                                             self.delta_v );
+                        if ret.is_empty(){
+                            ret = self.nn_query.query_nearest_k( ss_sample.clone(),
+                                                                 self.param.ss_metric,
+                                                                 1 );
+                        }
+                        
+                        let (_,idx_ret) = *ret.iter().nth(0).expect("nn query failed to return a node");
+                        idx_ret
+                    }
                 }
             };
 
@@ -702,7 +755,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     // info!("iter: {}, disc rate: {}", self.iter_exec, self.stat_witnesses_discovery_rate );
                     
                     if self.iter_exec > 1000 {
-                        if self.stat_witnesses_discovery_rate <= 0.02 {
+                        if self.stat_witnesses_discovery_rate <= 0.1 {
                             self.witness_disturbance = true;
                         } else {
                             self.witness_disturbance = false;

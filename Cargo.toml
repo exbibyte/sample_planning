@@ -35,6 +35,7 @@ mo_prim_thresh_high = []
 nn_sample_log = []
 nn_naive = []
 disable_witness_disturbance = []
+state_propagate_sample = []
 
 [[bin]]
 name = "planner"
