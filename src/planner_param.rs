@@ -17,9 +17,9 @@ pub enum StopCondition {
 #[derive(Clone,Debug)]
 pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
     // pub memory_limit: Option<i32>,
-    pub stop_cond: fn(T/*system state*/,TObs/*config state*/,TObs/*desired configuration*/)->bool,
+    pub stop_cond: fn(T/*system state*/,TObs/*config state*/,T/*desired state*/)->bool,
     pub states_init: T,
-    pub states_config_goal: TObs,//todo: also include state space variables as goals?
+    pub states_goal: T,
     pub dynamics: fn(T,C,f32)->T, //uses state space of system
     pub project_state_to_config: fn(T)->TObs,
     pub sim_delta: f32, //to be used as simulation step size
@@ -32,8 +32,6 @@ pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
     //optional, but would ggive error if running motion_primitives feature without providing functions
     pub motion_primitive_xform: Option<fn(T,T)->T>,
     pub motion_primitive_xform_inv: Option<fn(T,T)->T>,
-
-    pub ss_goal_gen: fn(TObs)->T,
 }
 
 #[derive(Clone,Debug)]
@@ -54,7 +52,7 @@ impl<T,C,TObs> fmt::Display for Param <T, C, TObs> where T: States, C: Control, 
 
         f.debug_struct("Param")
             .field("states_init", &format!("{:?}",&self.states_init) )
-            .field("states_config_goal", &format!("{:?}",&self.states_config_goal) )
+            .field("states_goal", &format!("{:?}",&self.states_goal) )
             .field("sim_delta", &self.sim_delta )
             .field("iterations_bound", &self.iterations_bound )
             .finish()

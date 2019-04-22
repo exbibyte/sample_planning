@@ -16,14 +16,43 @@ use mazth::mat;
 
 use std::f32::consts::PI;
 
-// const config_space_goal : States3D = States3D([0.45,0.65,0.]);
-const config_space_goal : States3D = States3D([0.8,0.1,0.]);
+use std::ops::{Add,Mul};
+
+impl Add for States3D {
+    type Output = States3D;
+    
+    fn add( self, other:States3D ) -> States3D {
+        
+        use std::f32::consts::PI;
+        
+        States3D(
+            [ self.0[0] + other.0[0],
+              self.0[1] + other.0[1],
+              ( self.0[2] + other.0[2] + 2.*PI ) % (2.*PI) ]
+        )
+    }
+}
+
+impl Mul<f32> for States3D {
+    type Output = States3D;
+    
+    fn mul( self, other: f32 ) -> States3D {
+        
+        use std::f32::consts::PI;
+        
+        States3D(
+            [ self.0[0] * other,
+              self.0[1] * other,
+              self.0[2] * other ]
+        )
+    }
+}
 
 ///load model info to the caller
 pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and configuration space both are 3 dimensional in this case
     Param {
         states_init: States3D([0.5, 0.1, 0.]), //default, override by prob_instances.rs file
-        states_config_goal: config_space_goal, //default, override by prob_instances.rs file
+        states_goal: States3D([0.8,0.1,0.]), //default, override by prob_instances.rs file
         dynamics: dynamics,
         stop_cond: stop_cond,
         cs_metric: config_space_distance,
@@ -38,7 +67,7 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and 
         motion_primitive_xform: Some(motion_primitive_xform),
         motion_primitive_xform_inv: Some(motion_primitive_xform_inv),
 
-        ss_goal_gen: statespace_goal_generator,
+        // ss_goal_gen: statespace_goal_generator,
     }
 }
 
@@ -145,9 +174,9 @@ pub fn sampler_state_space() -> States3D {
 }
 
 ///aritrary goal condition
-pub fn stop_cond( system_states: States3D, states_config: States3D, states_config_goal: States3D )-> bool {
-    states_config.0.iter()
-        .zip( states_config_goal.0.iter() ).take(2)
+pub fn stop_cond( system_states: States3D, states_config: States3D, states_goal: States3D )-> bool {
+    system_states.0.iter()
+        .zip( states_goal.0.iter() ).take(2)
         .all( |x| ((x.0)-(x.1)).abs() < 0.005 )
 }
 
@@ -201,11 +230,15 @@ pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {
         ret += (va[i] - vb[i])*(va[i] - vb[i]);
     }
 
-    let angle = (va[2] - vb[2]);
+    // let angle = (va[2] - vb[2]);
     
-    let angle_1 = (va[2] + 2.*PI)%(2.*PI);
-    let angle_2 = (vb[2] + 2.*PI)%(2.*PI);
-    ret += (angle_1-angle_2)*(angle_1-angle_2);
+    // let angle_1 = (va[2] + 2.*PI)%(2.*PI);
+    // let angle_2 = (vb[2] + 2.*PI)%(2.*PI);
+    // ret += (angle_1-angle_2)*(angle_1-angle_2);
+
+    let angle_1 = ((va[2] + 2.*PI)%(2.*PI))/(2.*PI);
+    let angle_2 = ((vb[2] + 2.*PI)%(2.*PI))/(2.*PI);
+    ret += ((angle_1-angle_2)*(angle_1-angle_2));
 
     ret
 }

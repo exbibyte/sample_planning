@@ -1,9 +1,9 @@
 use std::fmt::Debug;
-use std::ops::{Add,Mul};
 
-pub trait States : Clone + Sized + Debug {
+pub trait States : Clone + Debug {
     fn get_num_dims(&self) -> i32;
-    fn get_vals(&self) -> [f32;3];
+    fn get_vals(&self) -> Vec<f32>;
+    fn get_vals_3(&self) -> [f32;3];
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -13,8 +13,26 @@ impl States for States1D {
     fn get_num_dims(&self) -> i32 {
         1
     }
-    fn get_vals(&self) -> [f32;3] {
-        [ self.0, 0., 0., ]
+    fn get_vals(&self) -> Vec<f32> {
+        vec![ self.0 ]
+    }
+    fn get_vals_3(&self) -> [f32;3] {
+        [self.0, 0., 0.]
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct States2D(pub[f32;2]);
+
+impl States for States2D {
+    fn get_num_dims(&self) -> i32 {
+        2
+    }
+    fn get_vals(&self) -> Vec<f32> {
+        self.0.to_vec()
+    }
+    fn get_vals_3(&self) -> [f32;3] {
+        [self.0[0], self.0[1], 0.]
     }
 }
 
@@ -25,50 +43,25 @@ impl States for States3D {
     fn get_num_dims(&self) -> i32 {
         3
     }
-    fn get_vals(&self) -> [f32;3] {
-        self.0.clone()
+    fn get_vals(&self) -> Vec<f32> {
+        self.0.to_vec()
+    }
+    fn get_vals_3(&self) -> [f32;3] {
+        [self.0[0], self.0[1], self.0[2]]
     }
 }
-
-impl Add for States3D {
-    type Output = States3D;
-    
-    fn add( self, other:States3D ) -> States3D {
-        
-        use std::f32::consts::PI;
-        
-        States3D(
-            [ self.0[0] + other.0[0],
-              self.0[1] + other.0[1],
-              ( self.0[2] + other.0[2] + 2.*PI ) % (2.*PI) ]
-        )
-    }
-}
-
-impl Mul<f32> for States3D {
-    type Output = States3D;
-    
-    fn mul( self, other: f32 ) -> States3D {
-        
-        use std::f32::consts::PI;
-        
-        States3D(
-            [ self.0[0] * other,
-              self.0[1] * other,
-              self.0[2] * other ]
-        )
-    }
-}
-
 
 #[derive(Clone, Copy, Debug)]
-pub struct States6D(pub[f32;6]);
+pub struct States4D(pub[f32;4]);
 
-impl States for States6D {
+impl States for States4D {
     fn get_num_dims(&self) -> i32 {
-        6
+        4
     }
-    fn get_vals(&self) -> [f32;3] {
-        [ self.0[0], self.0[1], self.0[2] ]
+    fn get_vals(&self) -> Vec<f32> {
+        self.0.to_vec()
+    }
+    fn get_vals_3(&self) -> [f32;3] {
+        [self.0[0], self.0[1], self.0[2]]
     }
 }

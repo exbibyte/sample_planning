@@ -17,6 +17,7 @@ mod planner_basic;
 mod stats;
 mod states;
 mod dynamics_dubins;
+mod dynamics_airplane;
 mod rrt;
 mod control;
 mod map_loader;
@@ -26,7 +27,7 @@ mod prob_instances;
 use planner_param::{Param,ParamObstacles,ObsVariant,ParamTree};
 use planner::Planner;
 use planner_basic::{PlannerBasic};
-use states::*;
+use states::{States,States1D,States2D,States3D,States4D};
 use control::*;
 use instrumentation::*;
 
@@ -237,6 +238,7 @@ fn main() {
     //select init and goal states
     
     let prob_inst = prob_instances::load_3d_3d();
+    // let prob_inst = prob_instances::load_4d_3d();
 
     let prob_inst_query = matches.value_of("prob_inst").unwrap();
     
@@ -264,7 +266,8 @@ fn main() {
     let model_query = matches.value_of("model").unwrap();
 
     let models : HashMap<_,_> = vec![
-        ("dubins", dynamics_dubins::load_model())
+        ("dubins", dynamics_dubins::load_model()),
+        // ("airplane", dynamics_airplane::load_model())
     ].into_iter().collect();
 
     let model_sel = match models.get( model_query ) {
@@ -282,7 +285,7 @@ fn main() {
             }
 
             model_default.states_init = init_goal_pair.0;
-            model_default.states_config_goal = init_goal_pair.1;
+            model_default.states_goal = init_goal_pair.1;
 
             info!("model selected: {}", model_default);
             
@@ -292,6 +295,7 @@ fn main() {
     };
 
     let mut planner : Option<Box<Planner<States3D,Control1D,States3D> >> = None;
+    // let mut planner : Option<Box<Planner<States4D,Control2D,States3D> >> = None;
     let mut obs_copy : Option<ParamObstacles<States3D>> = None;
 
     let mut map_custom_mesh = None;
@@ -526,7 +530,7 @@ fn main() {
                             &Point3::new(0.,1.,0.) );
 
         //dest point
-        let config_state_goal = (model_sel.project_state_to_config)(model_sel.states_config_goal.clone());
+        let config_state_goal = (model_sel.project_state_to_config)(model_sel.states_goal.clone());
         window.draw_point( &Point3::from( &config_state_goal ),
                             &Point3::new(1.,0.,0.) );
 

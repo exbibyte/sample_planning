@@ -31,13 +31,41 @@ pub struct NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: States
     pub nodes_map: HashMap< usize, usize >, //map global idx -> local index of nodes
     pub inverse_map: HashMap< usize, usize >, //map local index of nodes -> global idx
 
-    pub list_alive: HashSet<usize>, //stores local indices of nodes
+    pub lookup_alive: HashSet<usize>, //stores local indices of nodes
+    // pub list_alive: Vec<usize>, //stores local indices of nodes
     
     pub list_free: Vec<usize>, //stores local indices of free slots
+
+    pub list_valence_fixup: Vec<usize>,
+
+    pub f_metric: fn(TS,TS)->f32,
+
+    pub stat_valence_fixups: usize,
 }
 
-impl<TS,TC,TObs> Default for NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-    fn default() -> Self {
+// impl<TS,TC,TObs> Default for NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
+//     fn default() -> Self {
+//         Self {
+//             phantom_ts: PhantomData,
+//             phantom_tc: PhantomData,
+//             phantom_tobs: PhantomData,
+
+//             edges: HashMap::new(),
+            
+//             nodes: vec![],
+//             nodes_map: HashMap::new(),
+//             inverse_map: HashMap::new(),
+
+//             // list_alive: vec![],
+//             list_alive: HashSet::new(),
+//             list_free: vec![],
+//         }
+//     }
+// }
+
+impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
+
+    pub fn init( f: fn(TS,TS)->f32 ) -> Self {
         Self {
             phantom_ts: PhantomData,
             phantom_tc: PhantomData,
@@ -49,15 +77,18 @@ impl<TS,TC,TObs> Default for NN_Stochastic<TS,TC,TObs> where TS: States, TC: Con
             nodes_map: HashMap::new(),
             inverse_map: HashMap::new(),
 
+            lookup_alive: HashSet::new(),
             // list_alive: vec![],
-            list_alive: HashSet::new(),
             list_free: vec![],
+
+            list_valence_fixup: vec![],
+            
+            f_metric: f,
+
+            stat_valence_fixups: 0,
         }
     }
-}
-
-impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-
+    
     fn edge_add( & mut self, a: usize, b: usize ){
         if !self.edges.contains_key( &a ) {
             self.edges.insert( a, HashSet::new() );
@@ -93,10 +124,10 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
     ///and adding edges to these nodes
     pub fn add( & mut self, state: TS, idx_global: usize, f: fn(TS,TS)->f32 ) -> usize {
         
-        let k = if self.list_alive.len() < 50 {
-            self.list_alive.len()
+        let k = if self.lookup_alive.len() < 50 {
+            self.lookup_alive.len()
         } else {
-            cmp::min( 2 * ((self.list_alive.len() as f32).log2() as usize), self.list_alive.len() )
+            cmp::min( 2 * ((self.lookup_alive.len() as f32).log2() as usize), self.lookup_alive.len() )
         };
 
         assert!( k >= 0 );
@@ -106,14 +137,14 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
         let node_idx_new = if self.list_free.len() > 0 {
             let idx = self.list_free.pop().unwrap();
             self.nodes[idx] = state;
-            assert!( !self.list_alive.contains(&idx) );
-            self.list_alive.insert(idx);
+            assert!( !self.lookup_alive.contains(&idx) );
+            self.lookup_alive.insert(idx);
             idx
         } else {
             let idx = self.nodes.len();
             self.nodes.push(state);
-            assert!( !self.list_alive.contains(&idx) );
-            self.list_alive.insert(idx);
+            assert!( !self.lookup_alive.contains(&idx) );
+            self.lookup_alive.insert(idx);
             idx
         };
 
@@ -131,7 +162,7 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
         
         self.nodes_map.insert( idx_global, node_idx_new );
         self.inverse_map.insert( node_idx_new, idx_global );
-            
+        
         node_idx_new
     }
 
@@ -149,11 +180,53 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
         
         self.list_free.push( idx_local );
 
-        self.list_alive.remove( &idx_local );
+        self.lookup_alive.remove( &idx_local );
             
         idx_local
     }
 
+    ///get valence number of nodes
+    fn sample_valence(&self) -> usize {
+
+        let valence = if self.lookup_alive.len() < 50 {
+            self.lookup_alive.len()
+        } else {
+            cmp::min( (((self.lookup_alive.len() as f32).log2()) as usize), self.lookup_alive.len() )
+        };
+        
+        valence
+    }
+
+    fn query_sample_count(&self) -> usize {
+        let n = self.lookup_alive.len();
+        let valence = if cfg!(feature="nn_sample_log") {
+            cmp::min(((n as f32).log2() as usize), n )
+        } else {
+            (n as f32).sqrt() as usize
+        };
+        n
+    }
+
+    fn valence_fixup(&mut self){
+        
+        use std::mem;
+        
+        let mut v = vec![];
+
+        mem::swap(&mut v, &mut self.list_valence_fixup );
+
+        self.stat_valence_fixups += v.len();
+        
+        v.into_iter()
+            .for_each(|x|{
+                let state = self.nodes[x].clone();
+                let idx_global = *self.inverse_map.get( &x ).expect("inverse map of node not exist");
+                self.remove(idx_global);
+                self.add( state, idx_global, self.f_metric );
+            });
+        assert!(self.list_valence_fixup.is_empty());
+    }
+    
     ///for small number of nodes, test cost function against each of the nodes,
     ///for large numer of nodes, stochastically sample a portion of nodes and narrow down to a single node
     ///and walk over its neighbours and take the min cost node if the cost improves,
@@ -161,11 +234,11 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
     ///returns (idx_local,idx_global)
     pub fn query_nearest( & mut self, state_query: TS, f: fn(TS,TS)->f32 ) -> Option<(usize,usize)> {
         
-        let n = self.list_alive.len();
+        let n = self.lookup_alive.len();
 
         if n < 100 {
             
-            let idx_local = self.list_alive.iter().min_by(|a,b| {
+            let idx_local = self.lookup_alive.iter().min_by(|a,b| {
                 let cost_a = f(self.nodes[**a].clone(), state_query.clone());
                 let cost_b = f(self.nodes[**b].clone(), state_query.clone());
                 cost_a.partial_cmp( &cost_b ).unwrap_or(Ordering::Equal)
@@ -181,24 +254,57 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
                 
         } else {
 
-            let n_sample = if cfg!(feature="nn_sample_log") {
-                cmp::min(((n as f32).log2() as usize), n )
-            } else {
-                (n as f32).sqrt() as usize
-            };
+            let n_valence = self.sample_valence();
+            let n_query_sample = self.query_sample_count();
             
             let mut rng = rand::thread_rng();
 
-            let sample_list : Vec<_> = self.list_alive.iter().collect();
-            
-            let mut idx_local = (0..n_sample).map(|x|{ let i : usize = rng.gen_range(0, n); i })
-                .map(|i| *sample_list[i] )
-                .min_by(|idx_a,idx_b| { 
-                    let cost_a = f(self.nodes[*idx_a].clone(), state_query.clone());
-                    let cost_b = f(self.nodes[*idx_b].clone(), state_query.clone());
-                    cost_a.partial_cmp( &cost_b ).unwrap_or(Ordering::Equal)
-                }).expect("no nodes");
+            //valence fixups
+            {
+                let sample_list : Vec<_> = self.lookup_alive.iter().collect();
 
+                let mut candidate_rewire_nodes = HashSet::new();
+                
+                (0..n_query_sample).map(|x|{ let i : usize = rng.gen_range(0, n); i })
+                    .map(|i|{
+                        let idx = *sample_list[i];
+                        idx
+                    }).for_each(|i|{
+                        match self.edges.get(&i){
+                            Some(neighbours)=>{
+                                if neighbours.len() < n_valence *4/5 {
+                                    candidate_rewire_nodes.insert(i);
+                                }
+                            },
+                            _ => {
+                                candidate_rewire_nodes.insert(i);
+                            },
+                        }
+                    });
+
+                candidate_rewire_nodes.into_iter()
+                    .for_each(|i|{
+                        self.list_valence_fixup.push( i );
+                    });
+
+                self.valence_fixup();
+            }
+
+            let sample_list : Vec<_> = self.lookup_alive.iter().collect();
+            
+            let mut idx_local = {
+                (0..n_query_sample).map(|x|{ let i : usize = rng.gen_range(0, n); i })
+                    .map(|i|{
+                        let idx = *sample_list[i];
+                        idx
+                    })
+                    .min_by(|idx_a,idx_b| { 
+                        let cost_a = f(self.nodes[*idx_a].clone(), state_query.clone());
+                        let cost_b = f(self.nodes[*idx_b].clone(), state_query.clone());
+                        cost_a.partial_cmp( &cost_b ).unwrap_or(Ordering::Equal)
+                    }).expect("no nodes")
+            };
+            
             loop {
                 let idx_new = match self.edges.get( &idx_local ) {
                     Some(x) => {
@@ -212,7 +318,7 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
                     },
                     _ => { idx_local },
                 };
-                
+
                 if idx_local != idx_new {
                     idx_local = idx_new;
                 } else {
@@ -248,13 +354,13 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
             
             for i in items_k.iter() {
                 
-                if !self.list_alive.contains(i) { panic!("not exist"); }
+                if !self.lookup_alive.contains(i) { panic!("not exist"); }
                 
                 match self.edges.get(i){
                     Some(x) => {
                         
                         let mut arr : Vec<_> = x.iter()
-                            // .inspect(|y| if !self.list_alive.contains(y) { panic!("not exist"); } )
+                            // .inspect(|y| if !self.lookup_alive.contains(y) { panic!("not exist"); } )
                             .cloned()
                             .collect();
                         
@@ -269,7 +375,7 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
                             .for_each(|y| {temp.insert(*y);} );
                     },
                     _ => {
-                        if self.list_alive.contains(i) {
+                        if self.lookup_alive.contains(i) {
                             temp.insert(*i);
                         }
                     },
@@ -308,10 +414,10 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
                                       f: fn(TS,TS)->f32,
                                       threshold: f32 ) -> Vec<(usize,usize)> {
 
-        let k = if self.list_alive.len() < 30 {
-            self.list_alive.len()
+        let k = if self.lookup_alive.len() < 30 {
+            self.lookup_alive.len()
         } else {
-            (self.list_alive.len() as f32).log2() as usize
+            (self.lookup_alive.len() as f32).log2() as usize
         };
         
         let mut candidates = self.query_nearest_k( state_query.clone(), f, k );
@@ -327,5 +433,9 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
         });
         
         arr
+    }
+
+    pub fn print_stats(&self) {
+        info!( "number of valence fixups: {}", self.stat_valence_fixups );
     }
 }

@@ -34,6 +34,7 @@ mo_prim_thresh_low = []
 mo_prim_thresh_high = []
 nn_sample_log = []
 nn_naive = []
+disable_witness_disturbance = []
 
 [[bin]]
 name = "planner"

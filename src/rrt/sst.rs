@@ -131,6 +131,12 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub stat_count_nn_node_queries: u64,
     
     pub last_moprim_candidates: Vec<(TObs,TObs)>,
+
+    pub stat_witnesses_discovery_rate: f32,
+
+    pub stat_witnesses_new: u32,
+
+    pub witness_disturbance: bool,
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -179,10 +185,10 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             },
 
             #[cfg(not(feature="nn_naive"))]
-            nn_query: NN_Stochastic::default(),
+            nn_query: NN_Stochastic::init( param.ss_metric ),
             
             #[cfg(not(feature="nn_naive"))]
-            nn_query_witness: NN_Stochastic::default(),
+            nn_query_witness: NN_Stochastic::init( param.ss_metric ),
 
             stat_pruned_nodes: 0,
             stat_iter_no_change: 0,
@@ -210,6 +216,12 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             stat_count_nn_node_queries: 0,
                 
             last_moprim_candidates: vec![],
+
+            stat_witnesses_discovery_rate: 0.,
+
+            stat_witnesses_new: 0,
+            
+            witness_disturbance: false,
         };
 
         #[cfg(not(feature="nn_naive"))]
@@ -260,7 +272,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
     pub fn reached_goal( & self, states: TS ) -> bool {
         let config_states = (self.param.project_state_to_config)(states.clone());
-        (self.param.stop_cond)( states, config_states, self.param.states_config_goal.clone() )
+        (self.param.stop_cond)( states, config_states, self.param.states_goal.clone() )
     }
 
     pub fn get_last_motion_prim_candidates( & mut self ) -> Vec<(TObs,TObs)>{
@@ -351,8 +363,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     ///return true if there is a collision
     fn collision_check( & mut self, config_space_state_before: &TObs, config_space_state_after: &TObs ) -> bool {
         
-        let v0 = config_space_state_before.get_vals();
-        let v1 = config_space_state_after.get_vals();
+        let v0 = config_space_state_before.get_vals_3();
+        let v1 = config_space_state_after.get_vals_3();
 
         let query_line = Line3::init( &[v0[0] as _, v0[1] as _, v0[2] as _],
                                       &[v1[0] as _, v1[1] as _, v1[2] as _] );
@@ -393,7 +405,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
                 //try using motion primitive to propagate towards goal
                 
-                let q_query_mo_prim = (self.param.ss_goal_gen)( self.param.states_config_goal.clone() ); //get a possible state space value that fulfills goal
+                let q_query_mo_prim = self.param.states_goal;
                 
                 let motions : Vec<Motion<_,_>> = self.mo_prim.query_motion( state_space_nearest.clone(),
                                                                             q_query_mo_prim,
@@ -537,6 +549,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             Some(x) => { x },
             _ => { self.param.iterations_bound },
         };
+
+        let config_space_goal = (self.param.project_state_to_config)(self.param.states_goal.clone());
         
         'l_outer: for i in 0..iter_batch {
 
@@ -634,19 +648,19 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             //get the witness node in the sampled neighbourhood
             
-            let witness_idx = {
+            let (witness_idx, new_witness) = {
                 #[cfg(feature="nn_naive")]
                 {
                     match self.nn_query_brute.query_nearest_witness( state_propagate.clone(),
                                                                      & self.witnesses, 
                                                                      & self.param,
                                                                      self.delta_s ) {
-                        Some(idx) => { idx },
+                        Some(idx) => { (idx,false) },
                         _ => {
                             //no witness found within delta_s vicinity, so create a new witness
                             let idx_new = self.witnesses.len();
                             self.witnesses.push( state_propagate.clone() );
-                            idx_new
+                            (idx_new,true)
                         },
                     }
                 }
@@ -658,18 +672,45 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     let witness_idx = match ret.iter().nth(0) {
                         Some((_,idx_global)) => {
                             //found witness
-                            *idx_global
+                            (*idx_global,false)
                         },
                         _ => {
                             //no witness found within delta_s vicinity, so create a new witness
                             let idx_new = self.create_new_witness( state_propagate.clone() );
-                            idx_new
+                            (idx_new,true)
                         },
                     };
+                    
                     witness_idx
                 }
             };
+
+            //disturbance injection for witness representative replacement
+            #[cfg(not(feature="disable_witness_disturbance"))]
+            {
+                if new_witness {
+                    self.stat_witnesses_new += 1;
+                }
                 
+                let iter_propagated = self.iter_exec - self.stat_iter_no_change;
+                
+                if self.iter_exec % 200 == 0 {
+
+                    self.stat_witnesses_discovery_rate = self.stat_witnesses_new as f32 / 200 as f32;
+                    self.stat_witnesses_new = 0;
+
+                    // info!("iter: {}, disc rate: {}", self.iter_exec, self.stat_witnesses_discovery_rate );
+                    
+                    if self.iter_exec > 1000 {
+                        if self.stat_witnesses_discovery_rate <= 0.02 {
+                            self.witness_disturbance = true;
+                        } else {
+                            self.witness_disturbance = false;
+                        }
+                    }
+                }
+            }
+            
             let t_delta = timer.dur_ms();
             self.stat_time_witness_nn_query += t_delta;
             self.stat_count_nn_witness_queries += 1;
@@ -686,7 +727,11 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             let idx_node = match witness_repr {
                 Some( repr ) => {
                     
-                    if state_propagate_cost < self.nodes[ repr ].cost || reached {
+                    let witness_distrubance_prob = rng.gen_range(0., 1.);
+
+                    if state_propagate_cost < self.nodes[ repr ].cost ||
+                        reached  ||
+                        ( self.witness_disturbance && witness_distrubance_prob > 0.5 ) {
 
                         if self.collision_check( &config_space_coord_before, &config_space_coord_after ) {
                             self.stat_iter_no_change += 1;
@@ -764,7 +809,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             
             match (idx_node, self.reached_goal( state_propagate ) ) {
                 (Some(x),true) => {
-                    let d_goal = (self.param.cs_metric)( config_space_coord_after.clone(), self.param.states_config_goal.clone() );
+                    let d_goal = (self.param.cs_metric)( config_space_coord_after.clone(), config_space_goal );
                     info!("found a path to goal on iteration: {}, diff: {}", self.iter_exec, d_goal );
                     self.idx_reached = Some(x);
                     break;
@@ -818,11 +863,13 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
     }
 
     fn print_stats( &self ){
+        info!( "witnesses: {}", self.witnesses.len() );
         info!( "nodes: {}", self.nodes.len() );
         info!( "nodes active: {}", self.nodes_active.len() );
         info!( "nodes inactive: {}", self.nodes_inactive.len() );
         info!( "pruned_nodes: {}", self.stat_pruned_nodes );
         info!( "nodes freelist: {}", self.nodes_freelist.len() );
+        info!( "disturbance active: {}", if self.witness_disturbance { "Y" } else { "N" } );
         info!( "iterations no change: {}/{}, {:.2}%", self.stat_iter_no_change, self.iter_exec, self.stat_iter_no_change as f32/self.iter_exec as f32 * 100. );
         info!( "iterations collision: {}/{}, {:.2}%", self.stat_iter_collision, self.iter_exec, self.stat_iter_collision as f32/self.iter_exec as f32 * 100. );
 
@@ -844,6 +891,11 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         {
             self.mo_prim.print_stats();
             info!( "stat_motion_prim_invoked: {}", self.stat_motion_prim_invoked );
+        }
+
+        #[cfg(not(feature="nn_naive"))]
+        {
+            self.nn_query_witness.print_stats();
         }
     }
 }
