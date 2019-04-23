@@ -130,35 +130,35 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
             cmp::min( 2 * ((self.lookup_alive.len() as f32).log2() as usize), self.lookup_alive.len() )
         };
 
-        assert!( k >= 0 );
+        debug_assert!( k >= 0 );
         
         let arr = self.query_nearest_k( state.clone(), f, k );
         
         let node_idx_new = if self.list_free.len() > 0 {
             let idx = self.list_free.pop().unwrap();
             self.nodes[idx] = state;
-            assert!( !self.lookup_alive.contains(&idx) );
+            debug_assert!( !self.lookup_alive.contains(&idx) );
             self.lookup_alive.insert(idx);
             idx
         } else {
             let idx = self.nodes.len();
             self.nodes.push(state);
-            assert!( !self.lookup_alive.contains(&idx) );
+            debug_assert!( !self.lookup_alive.contains(&idx) );
             self.lookup_alive.insert(idx);
             idx
         };
 
         // println!("self.nodes len: {}, arr length: {}", self.nodes.len(), arr.len() );
 
-        assert!( !self.edges.contains_key( &node_idx_new ) );
+        debug_assert!( !self.edges.contains_key( &node_idx_new ) );
         
         arr.iter().for_each(|(idx_l,idx_g)|{
             self.edge_add( node_idx_new, *idx_l );
             self.edge_add( *idx_l, node_idx_new );
         });
 
-        assert!( !self.nodes_map.contains_key( &idx_global ) );
-        assert!( !self.inverse_map.contains_key( &node_idx_new ) );
+        debug_assert!( !self.nodes_map.contains_key( &idx_global ) );
+        debug_assert!( !self.inverse_map.contains_key( &node_idx_new ) );
         
         self.nodes_map.insert( idx_global, node_idx_new );
         self.inverse_map.insert( node_idx_new, idx_global );
@@ -172,9 +172,9 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
         
         let idx_local = *self.nodes_map.get( &idx_global ).expect("node not exist");
 
-        assert!( self.inverse_map.remove( &idx_local ).is_some() );
+        debug_assert!( self.inverse_map.remove( &idx_local ).is_some() );
         
-        assert!( self.nodes_map.remove( &idx_global ).is_some() );
+        debug_assert!( self.nodes_map.remove( &idx_global ).is_some() );
         
         self.edge_remove( idx_local );
         
@@ -224,7 +224,7 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
                 self.remove(idx_global);
                 self.add( state, idx_global, self.f_metric );
             });
-        assert!(self.list_valence_fixup.is_empty());
+        debug_assert!(self.list_valence_fixup.is_empty());
     }
     
     ///for small number of nodes, test cost function against each of the nodes,

@@ -38,6 +38,8 @@ use zpatial::mazth::{rbox::RecBox,triprism::TriPrism};
 
 use crate::planner_param::*;
 
+use rayon::prelude::*;
+
 #[derive(Debug)]
 pub struct Node<TS> {
     
@@ -497,6 +499,171 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
         self.nn_query.add( state, id, self.param.ss_metric );
     }
+
+    ///return id of the nearest existing propagation node in state space and return a possibly modified state space sample
+    fn get_best_vicinity( & mut self, ss_sample: TS ) -> ( usize, TS ) {
+        
+        #[cfg(feature="nn_naive")]
+        {
+            let idx_ret = self.nn_query_brute.query_nearest_state_active( ss_sample.clone(),
+                                                                          & self.nodes,
+                                                                          & self.nodes_active,
+                                                                          & self.param,
+                                                                          self.delta_v );
+            ( idx_ret, ss_sample )
+        }
+        #[cfg(not(feature="nn_naive"))]
+        {
+            let mut rng = rand::thread_rng();
+            let prob_use_state_prop_sample = rng.gen_range(0., 1.);
+            
+            if cfg!(feature="state_propagate_sample") && prob_use_state_prop_sample > 0.5 
+            {
+                
+                let ss_samples = (0..5).map( |_| (self.param.ss_sampler)() ).collect::<Vec<_>>();
+                
+                let sample_nearest_pairs = ss_samples.into_iter()
+                    .map(|sample|{
+                        let r0 = self.nn_query.query_nearest_threshold( sample.clone(),
+                                                                        self.param.ss_metric,
+                                                                        self.delta_v );
+                        let idx_nearest = if r0.is_empty(){
+                            let r1 = self.nn_query.query_nearest_k( sample.clone(),
+                                                                    self.param.ss_metric,
+                                                                    1 );
+                            let (_,idx_ret) = *r1.iter().nth(0).unwrap();
+                            idx_ret
+                        }else{
+                            let (_,idx_ret) = *r0.iter().nth(0).unwrap();
+                            idx_ret
+                        };
+                        
+                        (sample,idx_nearest)
+                    }).collect::<Vec<_>>();
+                
+                let (sample_sel,idx_sel) = sample_nearest_pairs.into_iter()
+                    .max_by(|(sample_a,idx_nearest_a),(sample_b,idx_nearest_b)|{
+                        
+                        let dist_a = self.nn_query.query_dist_node_neighbourhood_avg( sample_a.clone(),
+                                                                                      *idx_nearest_a,
+                                                                                      self.param.ss_metric,
+                                                                                      1 );
+
+                        let dist_b = self.nn_query.query_dist_node_neighbourhood_avg( sample_b.clone(),
+                                                                                      *idx_nearest_b,
+                                                                                      self.param.ss_metric,
+                                                                                      1 );
+                        dist_a.partial_cmp( & dist_b ).unwrap_or( Ordering::Equal )
+                    }).unwrap();
+                
+                //return a different state space sample
+                ( idx_sel, sample_sel )
+
+            } else {
+                let mut ret = self.nn_query.query_nearest_threshold( ss_sample.clone(),
+                                                                     self.param.ss_metric,
+                                                                     self.delta_v );
+                if ret.is_empty(){
+                    ret = self.nn_query.query_nearest_k( ss_sample.clone(),
+                                                         self.param.ss_metric,
+                                                         1 );
+                }
+                
+                let (_,idx_ret) = *ret.iter().nth(0).expect("nn query failed to return a node");
+                
+                ( idx_ret, ss_sample )
+            }
+        }
+    }
+
+    ///returns ( propagation delta, control, is_using_motion_primitive )
+    fn select_propagation_params( & mut self, state_space_start: TS, state_config_start: TObs ) -> ( f32, TC, bool ) {
+        #[cfg(feature="motion_primitives")]
+        {
+            let rand_prob = rng.gen_range(0., 1.);
+            if rand_prob > 0.5 {
+                match self.try_motion_primitive_control( state_space_start, state_config_start ) {
+                    Some((t, u)) => {
+                        //replace monte carlo propagation time and random control sample with the one from motion primitive
+                        ( t, u, true )
+                    },
+                    _ => {
+                        let ( t, u ) = self.generate_monte_carlo_propagation();
+                        ( t, u, false )
+                    },
+                }
+            } else {
+                let ( t, u ) = self.generate_monte_carlo_propagation();
+                ( t, u, false )
+            }
+        }
+        #[cfg(not(feature="motion_primitives"))]
+        {
+            let ( t, u ) = self.generate_monte_carlo_propagation();
+            ( t, u, false )
+        }
+    }
+
+    ///returns ( idx of witness, is new witness ) associated with the propagated node
+    fn get_witness_neighbourhood( & mut self, state: TS ) -> ( usize, bool ) {
+        #[cfg(feature="nn_naive")]
+        {
+            match self.nn_query_brute.query_nearest_witness( state.clone(),
+                                                             & self.witnesses, 
+                                                             & self.param,
+                                                             self.delta_s ) {
+                Some(idx) => {
+                    ( idx, false )
+                },
+                _ => {
+                    //no witness found within delta_s vicinity, so create a new witness
+                    let idx_new = self.witnesses.len();
+                    self.witnesses.push( state );
+                    ( idx_new, true )
+                },
+            }
+        }
+        #[cfg(not(feature="nn_naive"))]
+        {
+            let ret = self.nn_query_witness.query_nearest_threshold( state.clone(),
+                                                                     self.param.ss_metric,
+                                                                     self.delta_s );
+            match ret.iter().nth(0) {
+                Some((_,idx_global)) => {
+                    //found witness
+                    ( *idx_global,false )
+                },
+                _ => {
+                    //no witness found within delta_s vicinity, so create a new witness
+                    let idx_new = self.create_new_witness( state );
+                    ( idx_new, true )
+                },
+            }
+        }
+    }
+
+    ///disturbance injection for witness representative replacement
+    fn witness_representative_disturbance_inject( & mut self ) {
+        
+        let iter_propagated = self.iter_exec - self.stat_iter_no_change;
+
+        //sliding window
+        if self.iter_exec % 200 == 0 {
+
+            self.stat_witnesses_discovery_rate = self.stat_witnesses_new as f32 / 200 as f32;
+            self.stat_witnesses_new = 0;
+            
+            if self.iter_exec > 1000 {
+
+                //trigger disturbance injection if witness discovery rate is low
+                if self.stat_witnesses_discovery_rate <= 0.1 {
+                    self.witness_disturbance = true;
+                } else {
+                    self.witness_disturbance = false;
+                }
+            }
+        }
+    }
 }
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -558,122 +725,29 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         'l_outer: for i in 0..iter_batch {
 
             self.iter_exec += 1;
-            
-            let mut ss_sample = (self.param.ss_sampler)(); //sampler for state space
 
-            let mut timer_nn = Timer::default();
+            let ( idx_state_best_nearest, ss_sample ) = {
 
-            //get best active state in vicinity delta_v of ss_sample, or return nearest active state
-            
-            let idx_state_best_nearest = {
-                #[cfg(feature="nn_naive")]
-                {
-                    let idx_ret = self.nn_query_brute.query_nearest_state_active( ss_sample.clone(),
-                                                                                  & self.nodes,
-                                                                                  & self.nodes_active,
-                                                                                  & self.param,
-                                                                                  self.delta_v );
-                    idx_ret
-                }
-                #[cfg(not(feature="nn_naive"))]
-                {
+                let ss_sample_seed = (self.param.ss_sampler)();
+                
+                let mut timer_nn = Timer::default();
 
-                    let prob_use_state_prop_sample = rng.gen_range(0., 1.);
-                    
-                    if cfg!(feature="state_propagate_sample") && prob_use_state_prop_sample > 0.5 
-                    {
-                        
-                        let ss_samples = (0..5).map( |_| (self.param.ss_sampler)() ).collect::<Vec<_>>();
-                        
-                        let sample_nearest_pairs = ss_samples.into_iter()
-                            .map(|sample|{
-                                let r0 = self.nn_query.query_nearest_threshold( sample.clone(),
-                                                                                self.param.ss_metric,
-                                                                                self.delta_v );
-                                let idx_nearest = if r0.is_empty(){
-                                    let r1 = self.nn_query.query_nearest_k( sample.clone(),
-                                                                            self.param.ss_metric,
-                                                                            1 );
-                                    let (_,idx_ret) = *r1.iter().nth(0).unwrap();
-                                    idx_ret
-                                }else{
-                                    let (_,idx_ret) = *r0.iter().nth(0).unwrap();
-                                    idx_ret
-                                };
-                                
-                                (sample,idx_nearest)
-                            }).collect::<Vec<_>>();
-                        
-                        let (sample_sel,idx_sel) = sample_nearest_pairs.into_iter()
-                            .max_by(|(sample_a,idx_nearest_a),(sample_b,idx_nearest_b)|{
-                                
-                                let dist_a = self.nn_query.query_dist_node_neighbourhood_avg( sample_a.clone(),
-                                                                                              *idx_nearest_a,
-                                                                                              self.param.ss_metric,
-                                                                                              1 );
+                //get best active state in vicinity delta_v of ss_sample, or return nearest active state
+                
+                let ( idx, sample ) = self.get_best_vicinity( ss_sample_seed );
 
-                                let dist_b = self.nn_query.query_dist_node_neighbourhood_avg( sample_b.clone(),
-                                                                                              *idx_nearest_b,
-                                                                                              self.param.ss_metric,
-                                                                                              1 );
-                                dist_a.partial_cmp( & dist_b ).unwrap_or( Ordering::Equal )
-                            }).unwrap();
+                let t_delta_nn = timer_nn.dur_ms();
+                self.stat_time_vicinity_best_nn_query += t_delta_nn;
+                self.stat_count_nn_node_queries += 1;
 
-                        // info!("idx_sel:{}",idx_sel);
-                        
-                        ss_sample = sample_sel;
-                        idx_sel
-                    }
-                    // #[cfg(not(feature="state_propagate_sample"))]
-                    else {
-                        let mut ret = self.nn_query.query_nearest_threshold( ss_sample.clone(),
-                                                                             self.param.ss_metric,
-                                                                             self.delta_v );
-                        if ret.is_empty(){
-                            ret = self.nn_query.query_nearest_k( ss_sample.clone(),
-                                                                 self.param.ss_metric,
-                                                                 1 );
-                        }
-                        
-                        let (_,idx_ret) = *ret.iter().nth(0).expect("nn query failed to return a node");
-                        idx_ret
-                    }
-                }
+                ( idx, sample )
             };
-
-            let t_delta_nn = timer_nn.dur_ms();
-            self.stat_time_vicinity_best_nn_query += t_delta_nn;
-            self.stat_count_nn_node_queries += 1;
             
             let state_start = self.nodes[idx_state_best_nearest].state.clone();
-            let config_space_coord_before = (self.param.project_state_to_config)(state_start.clone());
+            let config_space_coord_before = (self.param.project_state_to_config)( state_start.clone() );
             
-            let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = {
-                #[cfg(feature="motion_primitives")]
-                {
-                    let rand_prob = rng.gen_range(0., 1.);
-                    if rand_prob > 0.5 {
-                        match self.try_motion_primitive_control( state_start.clone(), config_space_coord_before.clone() ) {
-                            Some((t, u)) => {
-                                //replace monte carlo propagation time and random control sample with the one from motion primitive
-                                ( t, u, true )
-                            },
-                            _ => {
-                                let ( t, u ) = self.generate_monte_carlo_propagation();
-                                ( t, u, false )
-                            },
-                        }
-                    } else {
-                        let ( t, u ) = self.generate_monte_carlo_propagation();
-                        ( t, u, false )
-                    }
-                }
-                #[cfg(not(feature="motion_primitives"))]
-                {
-                    let ( t, u ) = self.generate_monte_carlo_propagation();
-                    ( t, u, false )
-                }
-            };
+            let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
+                                                                                                                config_space_coord_before.clone() );
 
             let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + monte_carlo_prop_delta;
 
@@ -700,73 +774,20 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             let mut timer = Timer::default();
 
             //get the witness node in the sampled neighbourhood
-            
-            let (witness_idx, new_witness) = {
-                #[cfg(feature="nn_naive")]
-                {
-                    match self.nn_query_brute.query_nearest_witness( state_propagate.clone(),
-                                                                     & self.witnesses, 
-                                                                     & self.param,
-                                                                     self.delta_s ) {
-                        Some(idx) => { (idx,false) },
-                        _ => {
-                            //no witness found within delta_s vicinity, so create a new witness
-                            let idx_new = self.witnesses.len();
-                            self.witnesses.push( state_propagate.clone() );
-                            (idx_new,true)
-                        },
-                    }
-                }
-                #[cfg(not(feature="nn_naive"))]
-                {
-                    let ret = self.nn_query_witness.query_nearest_threshold( state_propagate.clone(),
-                                                                             self.param.ss_metric,
-                                                                             self.delta_s );
-                    let witness_idx = match ret.iter().nth(0) {
-                        Some((_,idx_global)) => {
-                            //found witness
-                            (*idx_global,false)
-                        },
-                        _ => {
-                            //no witness found within delta_s vicinity, so create a new witness
-                            let idx_new = self.create_new_witness( state_propagate.clone() );
-                            (idx_new,true)
-                        },
-                    };
-                    
-                    witness_idx
-                }
-            };
 
-            //disturbance injection for witness representative replacement
-            #[cfg(not(feature="disable_witness_disturbance"))]
-            {
-                if new_witness {
-                    self.stat_witnesses_new += 1;
-                }
-                
-                let iter_propagated = self.iter_exec - self.stat_iter_no_change;
-                
-                if self.iter_exec % 200 == 0 {
+            let ( witness_idx, is_new_witness ) = self.get_witness_neighbourhood( state_propagate.clone() );
 
-                    self.stat_witnesses_discovery_rate = self.stat_witnesses_new as f32 / 200 as f32;
-                    self.stat_witnesses_new = 0;
-
-                    // info!("iter: {}, disc rate: {}", self.iter_exec, self.stat_witnesses_discovery_rate );
-                    
-                    if self.iter_exec > 1000 {
-                        if self.stat_witnesses_discovery_rate <= 0.1 {
-                            self.witness_disturbance = true;
-                        } else {
-                            self.witness_disturbance = false;
-                        }
-                    }
-                }
-            }
-            
             let t_delta = timer.dur_ms();
             self.stat_time_witness_nn_query += t_delta;
             self.stat_count_nn_witness_queries += 1;
+            
+            #[cfg(not(feature="disable_witness_disturbance"))]
+            {
+                if is_new_witness {
+                    self.stat_witnesses_new += 1;
+                }
+                self.witness_representative_disturbance_inject();
+            }
 
             let reached = self.reached_goal( state_propagate.clone() );
             
@@ -860,7 +881,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             let t_delta2 = timer2.dur_ms();
             self.stat_time_main_prop_check += t_delta2;
             
-            match (idx_node, self.reached_goal( state_propagate ) ) {
+            match (idx_node, reached ) {
                 (Some(x),true) => {
                     let d_goal = (self.param.cs_metric)( config_space_coord_after.clone(), config_space_goal );
                     info!("found a path to goal on iteration: {}, diff: {}", self.iter_exec, d_goal );
