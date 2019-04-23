@@ -43,26 +43,6 @@ pub struct NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: States
     pub stat_valence_fixups: usize,
 }
 
-// impl<TS,TC,TObs> Default for NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
-//     fn default() -> Self {
-//         Self {
-//             phantom_ts: PhantomData,
-//             phantom_tc: PhantomData,
-//             phantom_tobs: PhantomData,
-
-//             edges: HashMap::new(),
-            
-//             nodes: vec![],
-//             nodes_map: HashMap::new(),
-//             inverse_map: HashMap::new(),
-
-//             // list_alive: vec![],
-//             list_alive: HashSet::new(),
-//             list_free: vec![],
-//         }
-//     }
-// }
-
 impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
     pub fn init( f: fn(TS,TS)->f32 ) -> Self {
@@ -304,8 +284,16 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
                         cost_a.partial_cmp( &cost_b ).unwrap_or(Ordering::Equal)
                     }).expect("no nodes")
             };
+
+            let mut forever = 0;
             
             loop {
+
+                forever += 1;
+                if forever > 1_000 {
+                    break;
+                }
+                
                 let idx_new = match self.edges.get( &idx_local ) {
                     Some(x) => {
                         let temp = [idx_local].to_vec();
@@ -348,8 +336,16 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
         
         //loop until k nearest items converge
 
+        let mut forever = 0;
+        
         loop {
 
+            forever += 1;
+
+            if forever > 1_000 {
+                break;
+            }
+            
             let mut temp = HashSet::new();
             
             for i in items_k.iter() {

@@ -137,7 +137,9 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub stat_witnesses_discovery_rate: f32,
 
     pub stat_witnesses_new: u32,
-
+    
+    pub stat_batch_prop_triggered: u32,
+    
     pub witness_disturbance: bool,
 }
 
@@ -224,6 +226,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             stat_witnesses_new: 0,
             
             witness_disturbance: false,
+
+            stat_batch_prop_triggered: 0,
         };
 
         #[cfg(not(feature="nn_naive"))]
@@ -580,6 +584,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     fn select_propagation_params( & mut self, state_space_start: TS, state_config_start: TObs ) -> ( f32, TC, bool ) {
         #[cfg(feature="motion_primitives")]
         {
+            let mut rng = rand::thread_rng();
             let rand_prob = rng.gen_range(0., 1.);
             if rand_prob > 0.5 {
                 match self.try_motion_primitive_control( state_space_start, state_config_start ) {
@@ -656,7 +661,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             if self.iter_exec > 1000 {
 
                 //trigger disturbance injection if witness discovery rate is low
-                if self.stat_witnesses_discovery_rate <= 0.1 {
+                if self.stat_witnesses_discovery_rate <= 0.07 {
                     self.witness_disturbance = true;
                 } else {
                     self.witness_disturbance = false;
@@ -694,6 +699,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.stat_time_all = 0.;
         self.stat_count_nn_witness_queries = 0;
         self.stat_count_nn_node_queries = 0;
+        self.stat_batch_prop_triggered = 0;
         
         self.last_moprim_candidates = vec![];
 
@@ -745,9 +751,48 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             
             let state_start = self.nodes[idx_state_best_nearest].state.clone();
             let config_space_coord_before = (self.param.project_state_to_config)( state_start.clone() );
-            
-            let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
-                                                                                                                config_space_coord_before.clone() );
+
+            let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = {
+                #[cfg(feature="batch_propagate_sample")]
+                {
+                    let batch_prop = (0..10).filter_map(|_|{
+                        
+                        let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
+                                                                                                                            config_space_coord_before.clone() );
+                        let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + monte_carlo_prop_delta;
+
+                        let state_propagate = (self.param.dynamics)( state_start.clone(),
+                                                                     param_sample.clone(),
+                                                                     monte_carlo_prop_delta );
+                        
+                        let config_space_coord_after = (self.param.project_state_to_config)(state_propagate.clone());
+                        
+                        if self.collision_check( &config_space_coord_before, &config_space_coord_after ) {
+                            None
+                        } else {
+                            Some( ( monte_carlo_prop_delta, param_sample, is_using_motion_prim, state_propagate_cost ) )
+                        }   
+                    }).max_by(|a,b| a.3.partial_cmp( & b.3 ).unwrap_or( Ordering::Equal ) );
+
+                    match batch_prop {
+                        Some( item ) => {
+                            self.stat_batch_prop_triggered += 1;
+                            ( item.0, item.1, item.2 )
+                        },
+                        _ => {
+                            self.select_propagation_params( state_start.clone(),
+                                                            config_space_coord_before.clone() )
+                        },
+                    }
+                }
+                #[cfg(not(feature="batch_propagate_sample"))]
+                {
+                    let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
+                                                                                                                        config_space_coord_before.clone() );
+
+                    ( monte_carlo_prop_delta, param_sample, is_using_motion_prim )
+                }
+            };
 
             let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + monte_carlo_prop_delta;
 
@@ -967,6 +1012,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             info!( "stat_motion_prim_invoked: {}", self.stat_motion_prim_invoked );
         }
 
+        info!( "stat_batch_prop_triggered: {}", self.stat_batch_prop_triggered );
+        
         #[cfg(not(feature="nn_naive"))]
         {
             self.nn_query_witness.print_stats();
