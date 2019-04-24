@@ -68,7 +68,8 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
             stat_valence_fixups: 0,
         }
     }
-    
+
+    // #[inline]
     fn edge_add( & mut self, a: usize, b: usize ){
         if !self.edges.contains_key( &a ) {
             self.edges.insert( a, HashSet::new() );
@@ -77,6 +78,7 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
         hs.insert( b );
     }
 
+    // #[inline]
     fn edge_remove( & mut self, idx_local: usize ){
         
         let connected = match self.edges.get( &idx_local ) {
@@ -102,6 +104,7 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
 
     ///adds a new node by query for k (log(number of total nodes)) nearest nodes
     ///and adding edges to these nodes
+    // #[inline]
     pub fn add( & mut self, state: TS, idx_global: usize, f: fn(TS,TS)->f32 ) -> usize {
         
         let k = if self.lookup_alive.len() < 50 {
@@ -148,6 +151,7 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
 
     ///removes a given node and its connections
     ///this assumes the node exists internally
+    // #[inline]
     pub fn remove( & mut self, idx_global: usize ) -> usize {
         
         let idx_local = *self.nodes_map.get( &idx_global ).expect("node not exist");
@@ -212,6 +216,7 @@ impl<TS,TC,TObs> NN_Stochastic<TS,TC,TObs> where TS: States, TC: Control, TObs: 
     ///and walk over its neighbours and take the min cost node if the cost improves,
     ///iterate until it does not improve anymore.
     ///returns (idx_local,idx_global)
+    // #[inline]
     pub fn query_nearest( & mut self, state_query: TS, f: fn(TS,TS)->f32 ) -> Option<(usize,usize)> {
         
         let n = self.lookup_alive.len();

@@ -92,6 +92,8 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
     pub delta_v: f32,
     pub delta_s: f32,
+    pub delta_v_orig: f32,
+    pub delta_s_orig: f32,
     pub monte_carlo_prop_l: f32,
     pub monte_carlo_prop_h: f32,
 
@@ -172,6 +174,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             
             edges: HashMap::new(),
             
+            delta_v_orig: param_tree.delta_v,
+            delta_s_orig: param_tree.delta_s,
             delta_v: param_tree.delta_v,
             delta_s: param_tree.delta_s,
             monte_carlo_prop_l: param_tree.prop_delta_low,
@@ -240,6 +244,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         s
     }
 
+    // #[inline]
     pub fn get_trajectory_config_space( & self ) -> Vec<TObs> {
         self.nodes.iter()
             .map(|x| (self.param.project_state_to_config)(x.state.clone()) )
@@ -247,6 +252,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///returns pairs of (witness, witness representative)
+    // #[inline]
     pub fn get_witness_representatives_config_space( & self ) -> Vec<(TObs,TObs)> {
         self.witness_representative.iter()
             .map( |(idx_witness,idx_repr)| {
@@ -257,7 +263,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             })
             .collect()
     }
-    
+
+    // #[inline]
     pub fn get_trajectory_edges_config_space( & self ) -> Vec<((TObs,TObs),u32)> {
         
         self.edges.iter()
@@ -276,6 +283,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             })
             .collect()
     }
+    
+    // #[inline]
     pub fn reached_goal( & self, states: TS ) -> bool {
         let config_states = (self.param.project_state_to_config)(states.clone());
         (self.param.stop_cond)( states, config_states, self.param.states_goal.clone() )
@@ -284,7 +293,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub fn get_last_motion_prim_candidates( & mut self ) -> Vec<(TObs,TObs)>{
         self.last_moprim_candidates.clone()
     }
-    
+
+    // #[inline]
     fn prune_nodes( & mut self, node_inactive: usize ){
         
         //remove leaf nodes and branches from propagation tree if possible
@@ -323,6 +333,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     //insert node into propagate tree and return index of the inserted node
+    // #[inline]
     fn insert_node( & mut self,
                       idx_node_nearest: usize,
                       state_propagate: TS,
@@ -360,13 +371,15 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
         idx_node_new
     }
-    
+
+    // #[inline]
     fn inactivate_node( & mut self, idx_node: usize ){
         self.nodes_active.remove( &idx_node );
         self.nodes_inactive.insert( idx_node );
     }
 
     ///return true if there is a collision
+    // #[inline]
     fn collision_check( & mut self, config_space_state_before: &TObs, config_space_state_after: &TObs ) -> bool {
         
         let v0 = config_space_state_before.get_vals_3();
@@ -470,6 +483,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///propagation with random time delta and control
+    // #[inline]
     fn generate_monte_carlo_propagation( & mut self ) -> (f32, TC) {
 
         //enforce bounds
@@ -505,6 +519,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///return id of the nearest existing propagation node in state space and return a possibly modified state space sample
+    // #[inline]
     fn get_best_vicinity( & mut self, ss_sample: TS ) -> ( usize, TS ) {
         
         #[cfg(feature="nn_naive")]
@@ -581,6 +596,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///returns ( propagation delta, control, is_using_motion_primitive )
+    // #[inline]
     fn select_propagation_params( & mut self, state_space_start: TS, state_config_start: TObs ) -> ( f32, TC, bool ) {
         #[cfg(feature="motion_primitives")]
         {
@@ -610,6 +626,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///returns ( idx of witness, is new witness ) associated with the propagated node
+    // #[inline]
     fn get_witness_neighbourhood( & mut self, state: TS ) -> ( usize, bool ) {
         #[cfg(feature="nn_naive")]
         {
@@ -648,6 +665,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///disturbance injection for witness representative replacement
+    // #[inline]
     fn witness_representative_disturbance_inject( & mut self ) {
         
         let iter_propagated = self.iter_exec - self.stat_iter_no_change;
@@ -667,6 +685,57 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                     self.witness_disturbance = false;
                 }
             }
+        }
+    }
+
+    // #[inline]
+    fn propagate( & mut self, state_start: TS, idx_state_best_nearest: usize ) -> ( f32, TC, bool ) {
+        
+        let config_space_coord_before = (self.param.project_state_to_config)( state_start.clone() );
+        
+        #[cfg(feature="batch_propagate_sample")]
+        {
+            let batch_prop = (0..10).filter_map(|_|{
+                
+                let( monte_carlo_prop_delta,
+                     param_sample,
+                     is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
+                                                                              config_space_coord_before.clone() );
+                
+                let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + monte_carlo_prop_delta;
+
+                let state_propagate = (self.param.dynamics)( state_start.clone(),
+                                                             param_sample.clone(),
+                                                             monte_carlo_prop_delta );
+                
+                let config_space_coord_after = (self.param.project_state_to_config)(state_propagate.clone());
+                
+                if self.collision_check( &config_space_coord_before, &config_space_coord_after ) {
+                    None
+                } else {
+                    Some( ( monte_carlo_prop_delta, param_sample, is_using_motion_prim, state_propagate_cost ) )
+                }   
+            }).max_by(|a,b| a.3.partial_cmp( & b.3 ).unwrap_or( Ordering::Equal ) );
+
+            match batch_prop {
+                Some( item ) => {
+                    self.stat_batch_prop_triggered += 1;
+                    ( item.0, item.1, item.2 )
+                },
+                _ => {
+                    self.select_propagation_params( state_start.clone(),
+                                                    config_space_coord_before.clone() )
+                },
+            }
+        }
+        #[cfg(not(feature="batch_propagate_sample"))]
+        {   
+            let( monte_carlo_prop_delta,
+                 param_sample,
+                 is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
+                                                                          config_space_coord_before );
+
+            ( monte_carlo_prop_delta, param_sample, is_using_motion_prim )
         }
     }
 }
@@ -730,6 +799,11 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         
         'l_outer: for i in 0..iter_batch {
 
+            use std::f32::consts::PI;
+                
+            self.delta_v = self.delta_v_orig * (1. + ( self.iter_exec as f32 / 4000. * 2. * PI ).cos() * 0.75 );
+            self.delta_s = self.delta_s_orig * (1. + ( self.iter_exec as f32 / 4000. * 2. * PI ).cos() * 0.75 );
+            
             self.iter_exec += 1;
 
             let ( idx_state_best_nearest, ss_sample ) = {
@@ -752,47 +826,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             let state_start = self.nodes[idx_state_best_nearest].state.clone();
             let config_space_coord_before = (self.param.project_state_to_config)( state_start.clone() );
 
-            let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = {
-                #[cfg(feature="batch_propagate_sample")]
-                {
-                    let batch_prop = (0..10).filter_map(|_|{
-                        
-                        let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
-                                                                                                                            config_space_coord_before.clone() );
-                        let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + monte_carlo_prop_delta;
-
-                        let state_propagate = (self.param.dynamics)( state_start.clone(),
-                                                                     param_sample.clone(),
-                                                                     monte_carlo_prop_delta );
-                        
-                        let config_space_coord_after = (self.param.project_state_to_config)(state_propagate.clone());
-                        
-                        if self.collision_check( &config_space_coord_before, &config_space_coord_after ) {
-                            None
-                        } else {
-                            Some( ( monte_carlo_prop_delta, param_sample, is_using_motion_prim, state_propagate_cost ) )
-                        }   
-                    }).max_by(|a,b| a.3.partial_cmp( & b.3 ).unwrap_or( Ordering::Equal ) );
-
-                    match batch_prop {
-                        Some( item ) => {
-                            self.stat_batch_prop_triggered += 1;
-                            ( item.0, item.1, item.2 )
-                        },
-                        _ => {
-                            self.select_propagation_params( state_start.clone(),
-                                                            config_space_coord_before.clone() )
-                        },
-                    }
-                }
-                #[cfg(not(feature="batch_propagate_sample"))]
-                {
-                    let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
-                                                                                                                        config_space_coord_before.clone() );
-
-                    ( monte_carlo_prop_delta, param_sample, is_using_motion_prim )
-                }
-            };
+            let( monte_carlo_prop_delta, param_sample, is_using_motion_prim ) = self.propagate( state_start.clone(), idx_state_best_nearest );
 
             let state_propagate_cost = self.nodes[idx_state_best_nearest].cost + monte_carlo_prop_delta;
 
@@ -870,9 +904,9 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                             {
                                 self.inactivate_node( node_inactive.clone() );
                                 
-                                //remove leaf nodes and branches from propagation tree if possible
                                 self.prune_nodes( node_inactive ); //remove states from nn query as well
                             }
+
                             //save new representative state idx for current witness
                             *self.witness_representative.get_mut( &witness_idx ).unwrap() = idx_inserted;
 
@@ -896,20 +930,22 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     }
                 },
                 _ => {
-                    //no representative found, so just add the propagated state as representative
+                    
                     if self.collision_check( &config_space_coord_before, &config_space_coord_after ) {
                         self.stat_iter_no_change += 1;
                         self.stat_iter_collision += 1;
                         None
                     } else {
 
+                        //no representative found, so just add the propagated state as witness representative
+                        
                         let idx_inserted = self.insert_node( idx_state_best_nearest.clone(),
                                                              state_propagate.clone(),
                                                              param_sample.clone(),
                                                              state_propagate_cost.clone(),
                                                              is_using_motion_prim );
 
-                        self.witness_representative.insert( witness_idx, idx_inserted ); //save new representative state idx for current witness
+                        self.witness_representative.insert( witness_idx, idx_inserted );
 
                         #[cfg(not(feature="nn_naive"))]
                         {
@@ -981,6 +1017,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             .collect()
     }
 
+    // #[inline]
     fn print_stats( &self ){
         info!( "witnesses: {}", self.witnesses.len() );
         info!( "nodes: {}", self.nodes.len() );
@@ -1018,5 +1055,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         {
             self.nn_query_witness.print_stats();
         }
+        info!( "delta_v: {}", self.delta_v );
+        info!( "delta_s: {}", self.delta_s );
     }
 }

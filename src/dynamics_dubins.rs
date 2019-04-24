@@ -174,10 +174,16 @@ pub fn sampler_state_space() -> States3D {
 }
 
 ///aritrary goal condition
-pub fn stop_cond( system_states: States3D, states_config: States3D, states_goal: States3D )-> bool {
-    system_states.0.iter()
-        .zip( states_goal.0.iter() ).take(2)
-        .all( |x| ((x.0)-(x.1)).abs() < 0.005 )
+pub fn stop_cond( mut system_states: States3D, mut states_config: States3D, mut states_goal: States3D )-> bool {
+
+    system_states.0[2] = 0.;
+    states_goal.0[2] = 0.;
+    
+    statespace_distance( system_states, states_goal ) < 0.01
+
+    // system_states.0.iter()
+    //     .zip( states_goal.0.iter() ).take(2)
+    //     .all( |x| ((x.0)-(x.1)).abs() < 0.01 )
 }
 
 ///estimate of closeness to goal condition in configuration space
@@ -196,16 +202,15 @@ pub fn config_space_distance( states_config: States3D, states_config_goal: State
     for i in 0..2{
         ret += (va[i] - vb[i])*(va[i] - vb[i]);
     }
-
-    ret = ret.sqrt();
     
     let angle = (va[2] - vb[2]);
     
     let angle_1 = ((va[2] + 2.*PI)%(2.*PI))/(2.*PI);
     let angle_2 = ((vb[2] + 2.*PI)%(2.*PI))/(2.*PI);
-    ret += ((angle_1-angle_2)*(angle_1-angle_2)).sqrt();
+    ret += ((angle_1-angle_2)*(angle_1-angle_2));
 
-    ret
+    //ret
+    ret.sqrt()
 }
 
 ///generate a possible state space valuation that satisfies the goal
@@ -229,7 +234,7 @@ pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {
     for i in 0..2{
         ret += (va[i] - vb[i])*(va[i] - vb[i]);
     }
-
+    
     // let angle = (va[2] - vb[2]);
     
     // let angle_1 = (va[2] + 2.*PI)%(2.*PI);
@@ -238,9 +243,11 @@ pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {
 
     let angle_1 = ((va[2] + 2.*PI)%(2.*PI))/(2.*PI);
     let angle_2 = ((vb[2] + 2.*PI)%(2.*PI))/(2.*PI);
+    
     ret += ((angle_1-angle_2)*(angle_1-angle_2));
 
-    ret
+    ret.sqrt()
+    // ret
 }
 
 /// map ``q_end`` to coordinate frame of canonical motion primitive lookup space,

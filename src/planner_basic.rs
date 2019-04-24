@@ -41,7 +41,9 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     witness_pairs: Vec<(TObs,TObs)>,
     fini: bool,
     rrt_tree: sst::SST<TS,TC,TObs>,
-
+    
+    stat_duration: f64,
+    
     trajectory_mo_prim_candidates: Vec<(TObs,TObs)>,
 }
 
@@ -87,6 +89,8 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
                                        param_tree ),
 
             trajectory_mo_prim_candidates: vec![],
+
+            stat_duration: 0.,
         }
     }
 }
@@ -106,8 +110,6 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
         let changed = self.rrt_tree.iterate( iteration );
 
         let t_delta = timer.dur_ms();
-        
-        // info!("plan iteration end, duration: {}ms", t_delta);
 
         if changed {
             
@@ -116,6 +118,9 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
             self.trajectory_best = self.rrt_tree.get_best_trajectory_config_space();
             self.witness_pairs = self.rrt_tree.get_witness_representatives_config_space();
             self.trajectory_mo_prim_candidates = self.rrt_tree.get_last_motion_prim_candidates();
+
+            self.stat_duration += t_delta;
+            info!("accumulated duratoin:: {} ms", self.stat_duration);
         }
 
         changed

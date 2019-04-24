@@ -498,11 +498,11 @@ fn main() {
         traj_solution.iter()
             .for_each(|x| {
                 //draw edge of different colours due to different type of edges
-                if x.1 == 0 { 
+                // if x.1 == 0 { 
                     window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(1.,0.,0.) );
-                } else {
-                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(0.,1.,0.) );
-                }
+                // } else {
+                    // window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(0.,1.,0.) );
+                // }
             } );
             
         //domain perimeter
