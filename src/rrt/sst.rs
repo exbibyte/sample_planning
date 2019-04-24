@@ -40,6 +40,55 @@ use crate::planner_param::*;
 
 use rayon::prelude::*;
 
+use std::ops::{Add,Mul};
+
+#[derive(Debug)]
+pub struct Gaussian<TS> where TS: States {
+    pub mu: TS,
+    pub vicinity_dist: f32,
+    pub count_samples: u32,
+}
+
+impl <TS> Gaussian<TS> where TS: States {
+    
+    pub fn init( bootstrap_mu: TS, ss_dist: f32 ) -> Self {
+        Self {
+            mu: bootstrap_mu,
+            vicinity_dist: ss_dist,
+            count_samples: 0,
+        }
+    }
+
+    pub fn update_params( & mut self, samples: & [TS],
+                            f_ss_dist: fn(TS,TS)->f32,
+                            ss_add: fn(TS,TS)->TS,
+                            ss_mul: fn(TS,f32)->TS ) {
+
+        self.count_samples = 1; //dummy initialized count
+        
+        let items = samples.iter().filter_map(|i| {
+            if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist {
+                self.count_samples += 1;
+                Some( i.clone() )
+            } else {
+                None
+            }
+        }).collect::<Vec<_>>();
+
+        if !items.is_empty(){
+
+            let l = items.len();
+            let sum = items.into_iter().fold( TS::default(),|acc,x|{
+                ss_add(acc, x)
+            });
+
+            let avg = ss_mul( sum, 1. / l as f32 );
+            self.mu = ss_add( ss_mul( self.mu.clone(), 0.95 ), ss_mul( avg, 0.05 ) );
+        }
+
+    }
+}
+
 #[derive(Debug)]
 pub struct Node<TS> {
     
@@ -143,6 +192,12 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub stat_batch_prop_triggered: u32,
     
     pub witness_disturbance: bool,
+
+    pub sampling_mixture: Vec<Gaussian<TS>>,
+    
+    pub saved_feasible_traj: Vec<TS>,
+    
+    pub sampling_mixture_prob: HashMap<usize,f32>,
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -232,6 +287,10 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             witness_disturbance: false,
 
             stat_batch_prop_triggered: 0,
+
+            sampling_mixture: vec![],
+            saved_feasible_traj: vec![],
+            sampling_mixture_prob: HashMap::new(),
         };
 
         #[cfg(not(feature="nn_naive"))]
@@ -738,6 +797,119 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             ( monte_carlo_prop_delta, param_sample, is_using_motion_prim )
         }
     }
+
+    fn save_feasible_trajectory_state_space( & mut self ) {
+        
+        let mut nodes = vec![];
+
+        let lim = 1000000;
+        let mut count = 0;
+        match self.idx_reached {
+            Some(x) => {
+                let mut idx = x;
+                loop {
+                    count += 1;
+                    if count >= lim {
+                        panic!("looping");
+                    }
+                    
+                    nodes.push( self.nodes[idx].state.clone() );
+                    
+                    idx = match self.link_parent.get( &idx ) {
+                        Some(parent) => {
+                            *parent
+                        },
+                        _ => { break; },
+                    };
+                }
+            },
+            _ => {},
+        }
+
+        nodes.reverse();
+        
+        self.saved_feasible_traj = nodes;
+
+        assert!( !self.saved_feasible_traj.is_empty() );
+        
+        //initialize mixture if not done already
+        if self.sampling_mixture.is_empty() {
+            
+            self.sampling_mixture = self.saved_feasible_traj.iter().map(|x|{
+                let mut g = Gaussian::init( x.clone(), self.delta_s_orig * 2. );
+                g.update_params( self.saved_feasible_traj.as_slice(),
+                                 self.param.ss_metric,
+                                 self.param.ss_add,
+                                 self.param.ss_mul );
+                g
+            }).collect();
+
+            // self.sampling_mixture.iter_mut().for_each(|i|{
+            //     i.update_params( self.saved_feasible_traj.as_slice(),
+            //                      self.param.ss_metric,
+            //                      self.param.ss_add,
+            //                      self.param.ss_mul );
+            // });
+                
+            self.generate_sampling_mixture_prob();
+        }
+    }
+
+    fn generate_sampling_mixture_prob( & mut self ){
+        let count_total = self.sampling_mixture.iter().fold(0,|acc,x|{
+            acc + x.count_samples
+        });
+
+        self.sampling_mixture_prob = self.sampling_mixture.iter()
+            .enumerate()
+            .map(|(idx,x)|{
+                ( idx, x.count_samples as f32 / count_total as f32 )
+            })
+            // .inspect(|x|{ info!("mixture prob: {}",x.1 ); })
+            .collect();
+
+        assert!( !self.sampling_mixture_prob.is_empty() );
+    }
+
+    fn sample_ss_from_mixture_model( & mut self ) -> TS {
+        let mut rng = rand::thread_rng();
+        let rand_prob = rng.gen_range(0., 1.);
+        let mut cumulative = 0.;
+        
+        let max_len = self.sampling_mixture_prob.len();
+        assert!( max_len > 0 );
+        
+        let found_idx = match self.sampling_mixture_prob.iter().find(|(idx,ref x)|{
+            // info!("rand_prob: {}, cumulative: {}", rand_prob, cumulative );
+            if rand_prob < cumulative {
+                true
+            } else {
+                cumulative += *x;
+                false
+            }
+        }) {
+            Some( (idx,_) ) => { *idx },
+            _ => { max_len-1 },
+        };
+        
+        
+        let distr = self.sampling_mixture.get(found_idx).expect("mixture not retrieved");
+        let mu = distr.mu.get_vals();
+        let d = distr.vicinity_dist;
+
+        use rand::distributions::{Normal,Distribution};
+
+        let mut sample = TS::default();
+        
+        let vals = (0..mu.len()).map(|x|{
+            let n = Normal::new( mu[x] as f64, d as f64 );
+            n.sample(&mut rand::thread_rng()) as f32
+        }).collect::<Vec<_>>();
+        
+        sample.set_vals( vals.as_slice() );
+
+        sample
+    }
 }
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -751,6 +923,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
         self.edges = HashMap::new();
         self.witness_representative.clear();
+        self.witnesses.clear();
         self.nodes_active = HashSet::new();
         self.nodes_active.insert( 0 );
         self.nodes_inactive.clear();
@@ -769,9 +942,19 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         self.stat_count_nn_witness_queries = 0;
         self.stat_count_nn_node_queries = 0;
         self.stat_batch_prop_triggered = 0;
-        
+
         self.last_moprim_candidates = vec![];
 
+        #[cfg(not(feature="nn_naive"))]
+        {
+            self.nn_query = NN_Stochastic::init( self.param.ss_metric );
+        }
+        
+        #[cfg(not(feature="nn_naive"))]
+        {
+            self.nn_query_witness = NN_Stochastic::init( self.param.ss_metric );
+        }
+        
         #[cfg(not(feature="nn_naive"))]
         {
             self.create_new_witness( self.param.states_init.clone() );
@@ -808,7 +991,11 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             let ( idx_state_best_nearest, ss_sample ) = {
 
-                let ss_sample_seed = (self.param.ss_sampler)();
+                let ss_sample_seed = if self.sampling_mixture_prob.is_empty(){
+                    (self.param.ss_sampler)()
+                } else {
+                    self.sample_ss_from_mixture_model()
+                };
                 
                 let mut timer_nn = Timer::default();
 
@@ -967,6 +1154,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                     let d_goal = (self.param.cs_metric)( config_space_coord_after.clone(), config_space_goal );
                     info!("found a path to goal on iteration: {}, diff: {}", self.iter_exec, d_goal );
                     self.idx_reached = Some(x);
+                    self.save_feasible_trajectory_state_space();
                     break;
                 },
                 _ => {},
@@ -1057,5 +1245,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         }
         info!( "delta_v: {}", self.delta_v );
         info!( "delta_s: {}", self.delta_s );
+        info!( "is using importance sampling: {}", if !self.sampling_mixture_prob.is_empty() {"Y"} else {"N"} );
     }
 }

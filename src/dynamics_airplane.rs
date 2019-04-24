@@ -37,6 +37,9 @@ pub fn load_model() -> Param<States4D, Control2D, States3D> { //state space and 
         //motion primitive transform functions
         motion_primitive_xform: Some(motion_primitive_xform),
         motion_primitive_xform_inv: Some(motion_primitive_xform_inv),
+
+        ss_add: ss_add,
+        ss_mul: ss_mul,
     }
 }
 
@@ -73,6 +76,14 @@ impl Mul<f32> for States4D {
               self.0[3] * other ]
         )
     }
+}
+
+fn ss_add( a: States4D, b: States4D ) -> States4D {
+    a + b
+}
+
+fn ss_mul( a: States4D, b: f32 ) -> States4D {
+    a * b
 }
 
 ///calculate change

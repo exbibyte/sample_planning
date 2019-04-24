@@ -427,6 +427,8 @@ fn main() {
     let mut pl = planner.unwrap();
 
     info!("computing...");
+
+    // let mut iter_importance_sampling = 10;
     
     while window.render_with_camera( & mut camera ) {
 
@@ -543,9 +545,156 @@ fn main() {
                 c.set_color(0.8, 0.8, 0.);
             });
 
-        // if changed {
-        //     let mut dummy = String::new();
-        //     stdin().read_line(&mut dummy);
-        // }
+        if !changed {
+            use std::io::{self,Read};
+            println!("found an initial feasible path..");
+            use std::{thread, time};
+            let t_s = time::Duration::from_millis(3000);
+            thread::sleep(t_s);
+            
+            // let mut buffer = String::new();
+            // let stdin = io::stdin();
+            // let mut handle = stdin.lock();
+            // handle.read_to_string(&mut buffer).unwrap();
+            break;
+        }
+    }
+
+    //importance sampling
+    
+    loop {
+        
+        use std::io::{self,Read};
+
+        // println!("waiting to start importance sampling..");
+
+        // let mut buffer = String::new();
+        // let stdin = io::stdin();
+        // let mut handle = stdin.lock();
+        // handle.read_to_string(&mut buffer).unwrap();
+       
+        println!("starting importance sampling..");        
+        
+        pl.plan_init_imp_samp();
+        
+        while window.render_with_camera( & mut camera ) {
+
+            let mut timer = Timer::default();
+
+            let changed = pl.plan_iteration( iter_batch );
+
+            let coords_points : Vec<Point3<f32>> = pl.get_trajectories().iter()
+                .map(|x| Point3::from(x) )
+                .collect();
+            
+            let coords : Vec<((Point3<f32>,Point3<f32>),u32)> = pl.get_trajectories_edges().iter()
+                .map(|x| {
+                    let a = ((x.0).0).0;
+                    let b = ((x.0).1).0;
+                    ( ( Point3::new(a[0],a[1],a[2]),
+                        Point3::new(b[0],b[1],b[2]) ),
+                        x.1 )
+                })
+                .collect();
+
+            let traj_solution : Vec<((Point3<f32>,Point3<f32>),u32)> = pl.get_trajectory_best_edges().iter()
+                .map(|x| {
+                    let a = ((x.0).0).0;
+                    let b = ((x.0).1).0;
+                    ( ( Point3::new(a[0],a[1],a[2]),
+                        Point3::new(b[0],b[1],b[2]) ),
+                        x.1 )
+                })
+                .collect();
+            
+            //(witness, witness representative) pairs
+            let coords_witnesses : Vec<(Point3<f32>,Point3<f32>)> = pl.get_witness_pairs().iter()
+                .map(|x| {
+                    let a = (x.0).0;
+                    let b = (x.1).0;
+                    ( Point3::new(a[0],a[1],a[2]),
+                      Point3::new(b[0],b[1],b[2]) )
+                })
+                .collect();
+
+            let mo_prim_candidates : Vec<(Point3<f32>,Point3<f32>)> = pl.get_trajectories_mo_prim_candidates().iter()
+                .map(|x| {
+                    let a = (x.0).0;
+                    let b = (x.1).0;
+                    ( Point3::new(a[0],a[1],a[2]),
+                      Point3::new(b[0],b[1],b[2]) )
+                })
+                .collect();
+
+            //draw
+            mo_prim_candidates.iter()
+                .for_each(|x| {
+                    window.draw_line( &x.0, &x.1, &Point3::new(0.9,1.0,0.0) );
+                } );
+            
+            coords.iter()
+                .for_each(|x| {
+                    //draw edge of different colours due to different type of edges
+                    if x.1 == 0 { 
+                        window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(0.3,0.3,0.3) );
+                    } else {
+                        window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(0.,1.,0.5) );
+                    }
+                } );
+
+            traj_solution.iter()
+                .for_each(|x| {
+                    //draw edge of different colours due to different type of edges
+                    window.draw_line( &(x.0).0, &(x.0).1, &Point3::new(1.,0.,0.) );
+                } );
+            
+            //domain perimeter
+            window.set_point_size(0.3);    
+
+            if display_witness_info {
+                coords_witnesses.iter()
+                    .for_each(|x| {
+                        window.draw_line( &x.0, &x.1, &Point3::new(1.,0.,0.) );
+                        window.set_point_size(0.45);
+                        window.draw_point( &x.0, &Point3::new(1.,0.,1.) );
+                        window.draw_point( &x.1, &Point3::new(0.,0.,1.) );
+                    } );
+            }
+            
+            window.set_point_size(10.);
+            
+            //start point
+            
+            let config_state_init = (model_sel.project_state_to_config)(model_sel.states_init.clone());
+            window.draw_point( &Point3::from( &config_state_init ),
+                                &Point3::new(0.,1.,0.) );
+
+            //dest point
+            let config_state_goal = (model_sel.project_state_to_config)(model_sel.states_goal.clone());
+            window.draw_point( &Point3::from( &config_state_goal ),
+                                &Point3::new(1.,0.,0.) );
+
+            obs_data.iter()
+                .for_each(|x| {
+                    let a = x.0;
+                    let b = x.1;
+                    let mut c = window.add_cube( a.0, a.1, a.2 );
+                    c.append_translation( &Translation3::new( b.0, b.1, b.2 ) );
+                    c.set_color(0.8, 0.8, 0.);
+                });
+
+            if !changed {
+                use std::{thread, time};
+                let t_s = time::Duration::from_millis(3000);
+                thread::sleep(t_s);
+                // use std::io::{self,Read};
+                // println!("starting importance sampling..");
+                // let mut buffer = String::new();
+                // let stdin = io::stdin();
+                // let mut handle = stdin.lock();
+                // handle.read_to_string(&mut buffer).unwrap();
+                break;
+            }
+        }
     }
 }

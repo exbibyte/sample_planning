@@ -32,6 +32,9 @@ pub struct Param <T, C, TObs> where T: States, C: Control, TObs: States {
     //optional, but would ggive error if running motion_primitives feature without providing functions
     pub motion_primitive_xform: Option<fn(T,T)->T>,
     pub motion_primitive_xform_inv: Option<fn(T,T)->T>,
+
+    pub ss_add: fn(T,T)->T,
+    pub ss_mul: fn(T,f32)->T,
 }
 
 #[derive(Clone,Debug)]

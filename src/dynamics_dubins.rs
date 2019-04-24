@@ -48,6 +48,14 @@ impl Mul<f32> for States3D {
     }
 }
 
+fn ss_add( a: States3D, b: States3D ) -> States3D {
+    a + b
+}
+
+fn ss_mul( a: States3D, b: f32 ) -> States3D {
+    a * b
+}
+
 ///load model info to the caller
 pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and configuration space both are 3 dimensional in this case
     Param {
@@ -68,6 +76,9 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and 
         motion_primitive_xform_inv: Some(motion_primitive_xform_inv),
 
         // ss_goal_gen: statespace_goal_generator,
+
+        ss_add: ss_add,
+        ss_mul: ss_mul,
     }
 }
 

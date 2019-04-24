@@ -148,4 +148,7 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
     fn get_witness_pairs( & self ) -> &[(TObs,TObs)] {
         self.witness_pairs.as_ref()
     }
+    fn plan_init_imp_samp( & mut self ) {
+        self.rrt_tree.reset();
+    }
 }
