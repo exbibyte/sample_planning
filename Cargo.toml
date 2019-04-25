@@ -39,6 +39,7 @@ nn_naive = []
 disable_witness_disturbance = []
 state_propagate_sample = []
 batch_propagate_sample = []
+path_optimize = []
 
 [[bin]]
 name = "planner"

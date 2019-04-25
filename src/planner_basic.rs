@@ -45,6 +45,8 @@ pub struct PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States
     stat_duration: f64,
     
     trajectory_mo_prim_candidates: Vec<(TObs,TObs)>,
+
+    sampling_distr: Vec<TObs>,
 }
 
 impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -91,6 +93,8 @@ impl <TS,TC,TObs> PlannerBasic <TS,TC,TObs> where TS: States, TC: Control, TObs:
             trajectory_mo_prim_candidates: vec![],
 
             stat_duration: 0.,
+
+            sampling_distr: vec![],
         }
     }
 }
@@ -120,6 +124,8 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
             self.trajectory_mo_prim_candidates = self.rrt_tree.get_last_motion_prim_candidates();
 
             self.stat_duration += t_delta;
+            self.sampling_distr = self.rrt_tree.get_sampling_distr();
+            
             info!("accumulated duratoin:: {} ms", self.stat_duration);
         }
 
@@ -150,5 +156,9 @@ impl <TS,TC,TObs> Planner<TS,TC,TObs> for PlannerBasic <TS,TC,TObs> where TS: St
     }
     fn plan_init_imp_samp( & mut self ) {
         self.rrt_tree.reset();
+    }
+
+    fn get_sampling_distr( & self ) -> &[TObs] {
+        self.sampling_distr.as_ref()
     }
 }

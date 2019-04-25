@@ -12,4 +12,5 @@ pub trait Planner <TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     fn get_witness_pairs( & self ) -> &[(TObs,TObs)];
     fn get_trajectories_mo_prim_candidates( & self ) -> &[(TObs,TObs)];
     fn plan_init_imp_samp( & mut self );
+    fn get_sampling_distr( & self ) -> &[TObs];
 }

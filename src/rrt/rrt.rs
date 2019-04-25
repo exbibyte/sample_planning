@@ -12,5 +12,6 @@ pub trait RRT < TS, TC, TObs > where TS: States, TC: Control, TObs: States {
     fn get_best_trajectory_config_space( & self ) -> Vec<((TObs,TObs),u32)>;
     fn reset( & mut self );
     fn print_stats( &self ){}
+    fn get_sampling_distr( & self ) -> Vec<TObs>;
 }
 

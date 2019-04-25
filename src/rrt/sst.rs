@@ -67,7 +67,7 @@ impl <TS> Gaussian<TS> where TS: States {
         self.count_samples = 1; //dummy initialized count
         
         let items = samples.iter().filter_map(|i| {
-            if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist {
+            if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist * 2. {
                 self.count_samples += 1;
                 Some( i.clone() )
             } else {
@@ -83,7 +83,7 @@ impl <TS> Gaussian<TS> where TS: States {
             });
 
             let avg = ss_mul( sum, 1. / l as f32 );
-            self.mu = ss_add( ss_mul( self.mu.clone(), 0.95 ), ss_mul( avg, 0.05 ) );
+            self.mu = ss_add( ss_mul( self.mu.clone(), 0.9 ), ss_mul( avg, 0.1 ) );
         }
 
     }
@@ -101,7 +101,7 @@ pub struct Node<TS> {
     ///child node indices
     pub children: HashSet<(usize)>,
     
-    ///cost in terms of number of steps from the root of the propagation tree
+    ///cost from the root of the propagation tree
     pub cost: f32,
 }
 
@@ -194,10 +194,18 @@ pub struct SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     pub witness_disturbance: bool,
 
     pub sampling_mixture: Vec<Gaussian<TS>>,
-    
+
+    ///last feasible trajectory
     pub saved_feasible_traj: Vec<TS>,
     
     pub sampling_mixture_prob: HashMap<usize,f32>,
+
+    ///a sample in this scheme is a feasible trajectory in the state space
+    pub importance_samples: Vec<(f32,Vec<TS>)>,
+
+    pub importance_sample_gamma: f32,
+
+    pub optimization_iterations: u32,
 }
 
 impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
@@ -291,6 +299,12 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             sampling_mixture: vec![],
             saved_feasible_traj: vec![],
             sampling_mixture_prob: HashMap::new(),
+
+            importance_samples: vec![],
+
+            importance_sample_gamma: std::f32::INFINITY,
+
+            optimization_iterations: 0,
         };
 
         #[cfg(not(feature="nn_naive"))]
@@ -303,7 +317,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         s
     }
 
-    // #[inline]
+
     pub fn get_trajectory_config_space( & self ) -> Vec<TObs> {
         self.nodes.iter()
             .map(|x| (self.param.project_state_to_config)(x.state.clone()) )
@@ -311,7 +325,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///returns pairs of (witness, witness representative)
-    // #[inline]
+
     pub fn get_witness_representatives_config_space( & self ) -> Vec<(TObs,TObs)> {
         self.witness_representative.iter()
             .map( |(idx_witness,idx_repr)| {
@@ -323,7 +337,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             .collect()
     }
 
-    // #[inline]
+
     pub fn get_trajectory_edges_config_space( & self ) -> Vec<((TObs,TObs),u32)> {
         
         self.edges.iter()
@@ -343,7 +357,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             .collect()
     }
     
-    // #[inline]
+
     pub fn reached_goal( & self, states: TS ) -> bool {
         let config_states = (self.param.project_state_to_config)(states.clone());
         (self.param.stop_cond)( states, config_states, self.param.states_goal.clone() )
@@ -353,7 +367,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         self.last_moprim_candidates.clone()
     }
 
-    // #[inline]
+
     fn prune_nodes( & mut self, node_inactive: usize ){
         
         //remove leaf nodes and branches from propagation tree if possible
@@ -392,7 +406,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     //insert node into propagate tree and return index of the inserted node
-    // #[inline]
+
     fn insert_node( & mut self,
                       idx_node_nearest: usize,
                       state_propagate: TS,
@@ -431,14 +445,14 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         idx_node_new
     }
 
-    // #[inline]
+
     fn inactivate_node( & mut self, idx_node: usize ){
         self.nodes_active.remove( &idx_node );
         self.nodes_inactive.insert( idx_node );
     }
 
     ///return true if there is a collision
-    // #[inline]
+
     fn collision_check( & mut self, config_space_state_before: &TObs, config_space_state_after: &TObs ) -> bool {
         
         let v0 = config_space_state_before.get_vals_3();
@@ -542,7 +556,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///propagation with random time delta and control
-    // #[inline]
+
     fn generate_monte_carlo_propagation( & mut self ) -> (f32, TC) {
 
         //enforce bounds
@@ -578,7 +592,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///return id of the nearest existing propagation node in state space and return a possibly modified state space sample
-    // #[inline]
+
     fn get_best_vicinity( & mut self, ss_sample: TS ) -> ( usize, TS ) {
         
         #[cfg(feature="nn_naive")]
@@ -655,7 +669,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///returns ( propagation delta, control, is_using_motion_primitive )
-    // #[inline]
+
     fn select_propagation_params( & mut self, state_space_start: TS, state_config_start: TObs ) -> ( f32, TC, bool ) {
         #[cfg(feature="motion_primitives")]
         {
@@ -685,7 +699,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///returns ( idx of witness, is new witness ) associated with the propagated node
-    // #[inline]
+
     fn get_witness_neighbourhood( & mut self, state: TS ) -> ( usize, bool ) {
         #[cfg(feature="nn_naive")]
         {
@@ -724,7 +738,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     }
 
     ///disturbance injection for witness representative replacement
-    // #[inline]
+
     fn witness_representative_disturbance_inject( & mut self ) {
         
         let iter_propagated = self.iter_exec - self.stat_iter_no_change;
@@ -738,7 +752,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             if self.iter_exec > 1000 {
 
                 //trigger disturbance injection if witness discovery rate is low
-                if self.stat_witnesses_discovery_rate <= 0.07 {
+                if self.stat_witnesses_discovery_rate <= 0.1 {
                     self.witness_disturbance = true;
                 } else {
                     self.witness_disturbance = false;
@@ -747,7 +761,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         }
     }
 
-    // #[inline]
+
     fn propagate( & mut self, state_start: TS, idx_state_best_nearest: usize ) -> ( f32, TC, bool ) {
         
         let config_space_coord_before = (self.param.project_state_to_config)( state_start.clone() );
@@ -801,7 +815,9 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     fn save_feasible_trajectory_state_space( & mut self ) {
         
         let mut nodes = vec![];
-
+        
+        let mut fitness_score = 0.;
+        
         let lim = 1000000;
         let mut count = 0;
         match self.idx_reached {
@@ -812,9 +828,10 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                     if count >= lim {
                         panic!("looping");
                     }
-                    
+
                     nodes.push( self.nodes[idx].state.clone() );
-                    
+                    fitness_score += self.nodes[idx].cost;
+                        
                     idx = match self.link_parent.get( &idx ) {
                         Some(parent) => {
                             *parent
@@ -832,42 +849,123 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
         assert!( !self.saved_feasible_traj.is_empty() );
         
+        self.importance_samples.push( (fitness_score, self.saved_feasible_traj.clone()) );
+
+        let num_samples = 20;
+        
         //initialize mixture if not done already
         if self.sampling_mixture.is_empty() {
             
             self.sampling_mixture = self.saved_feasible_traj.iter().map(|x|{
-                let mut g = Gaussian::init( x.clone(), self.delta_s_orig * 2. );
+                let mut g = Gaussian::init( x.clone(), self.delta_s_orig );
                 g.update_params( self.saved_feasible_traj.as_slice(),
                                  self.param.ss_metric,
                                  self.param.ss_add,
                                  self.param.ss_mul );
                 g
             }).collect();
-
-            // self.sampling_mixture.iter_mut().for_each(|i|{
-            //     i.update_params( self.saved_feasible_traj.as_slice(),
-            //                      self.param.ss_metric,
-            //                      self.param.ss_add,
-            //                      self.param.ss_mul );
-            // });
                 
             self.generate_sampling_mixture_prob();
+
+        } else if self.importance_samples.len() >= num_samples {
+
+            self.optimization_iterations += 1;
+                
+            let gamma_old = self.importance_sample_gamma;
+                
+            info!("evaluating importance samples ({})", num_samples);
+
+            //filter using current gamma
+            let mut filtered = self.importance_samples.iter()
+                .enumerate()
+                .map(|(idx,x)| (idx,x.0) )
+                .filter(|(idx,x)| *x < self.importance_sample_gamma )
+                .collect::<Vec<_>>();
+
+            //get a quantile of the worst filtered samples
+            let percentile = 0.1;
+            //order in descreasing fitness score (lower is better)
+            filtered.sort_by(|a,b| b.1.partial_cmp( &a.1 ).unwrap_or(Ordering::Equal) );
+
+            let l_filt = filtered.len();
+
+            info!("fitness gamma: {}", self.importance_sample_gamma );
+            info!("filtered set length: {}", l_filt );
+            
+            if l_filt > 0 {
+
+                let idx_sel = ( percentile * l_filt as f32 ) as usize;
+
+                if idx_sel >= filtered.len() {
+                    
+                    // self.importance_sample_gamma = filtered[l_filt-1].1;
+                    
+                } else {
+                    
+                    //update gamma using fitness score of worst quantile sample
+                    self.importance_sample_gamma = filtered[idx_sel].1;
+
+                    //update parameter of the sampling distribution using elite set
+                    
+                    let sample_idxs = filtered.iter().skip(idx_sel+1)
+                        .map(|(idx,x)| *idx)
+                        .collect::<Vec<_>>();
+
+                    if sample_idxs.len() > 0 {
+                        let elite_sample_regions : Vec<TS> = sample_idxs.iter()
+                            .map(|idx| self.importance_samples[*idx].1.clone() )
+                            .flatten()
+                            .collect();
+                        
+                        self.sampling_mixture = elite_sample_regions.iter().map(|x|{
+                            let mut g = Gaussian::init( x.clone(), self.delta_s_orig );
+                            // g.update_params( self.saved_feasible_traj.as_slice(),
+                            //                  self.param.ss_metric,
+                            //                  self.param.ss_add,
+                            //                  self.param.ss_mul );
+                            g
+                        }).collect();
+                        
+                        self.generate_sampling_mixture_prob();
+                    }
+                }
+            }
+
+            info!("fitness gamma old: {}, new: {}", gamma_old, self.importance_sample_gamma );
+            
+            if self.importance_sample_gamma != std::f32::INFINITY &&
+               (self.importance_sample_gamma - gamma_old).abs() < 0.001 {
+                info!("no quality improvement");
+            }
+            
+            self.importance_samples.clear();
         }
     }
 
     fn generate_sampling_mixture_prob( & mut self ){
+        // let count_total = self.sampling_mixture.iter().fold(0,|acc,x|{
+        //     acc + x.count_samples
+        // });
+
+        // self.sampling_mixture_prob = self.sampling_mixture.iter()
+        //     .enumerate()
+        //     .map(|(idx,x)|{
+        //         ( idx, x.count_samples as f32 / count_total as f32 )
+        //     })
+        //     // .inspect(|x|{ info!("mixture prob: {}",x.1 ); })
+        //     .collect();
+
         let count_total = self.sampling_mixture.iter().fold(0,|acc,x|{
-            acc + x.count_samples
+            acc + 1
         });
 
         self.sampling_mixture_prob = self.sampling_mixture.iter()
             .enumerate()
             .map(|(idx,x)|{
-                ( idx, x.count_samples as f32 / count_total as f32 )
+                ( idx, 1. / count_total as f32 )
             })
-            // .inspect(|x|{ info!("mixture prob: {}",x.1 ); })
             .collect();
-
+        
         assert!( !self.sampling_mixture_prob.is_empty() );
     }
 
@@ -895,7 +993,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         
         let distr = self.sampling_mixture.get(found_idx).expect("mixture not retrieved");
         let mu = distr.mu.get_vals();
-        let d = distr.vicinity_dist;
+        let d = distr.vicinity_dist * 2.;
 
         use rand::distributions::{Normal,Distribution};
 
@@ -914,6 +1012,12 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
 impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
+    fn get_sampling_distr( & self ) -> Vec<TObs> {
+        self.sampling_mixture.iter()
+            .map(|x| (self.param.project_state_to_config)(x.mu.clone()) )
+            .collect()
+    }
+        
     fn reset( & mut self ){
         
         self.nodes = vec![ Node { id: 0,
@@ -984,8 +1088,11 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
 
             use std::f32::consts::PI;
                 
-            self.delta_v = self.delta_v_orig * (1. + ( self.iter_exec as f32 / 4000. * 2. * PI ).cos() * 0.75 );
-            self.delta_s = self.delta_s_orig * (1. + ( self.iter_exec as f32 / 4000. * 2. * PI ).cos() * 0.75 );
+            // self.delta_v = self.delta_v_orig * (1. + ( self.iter_exec as f32 / 4000. * 2. * PI ).cos() * 0.75 );
+            // self.delta_s = self.delta_s_orig * (1. + ( self.iter_exec as f32 / 4000. * 2. * PI ).cos() * 0.75 );
+
+            self.delta_v = self.delta_v_orig;
+            self.delta_s = self.delta_s_orig;
             
             self.iter_exec += 1;
 
@@ -1205,7 +1312,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
             .collect()
     }
 
-    // #[inline]
     fn print_stats( &self ){
         info!( "witnesses: {}", self.witnesses.len() );
         info!( "nodes: {}", self.nodes.len() );
@@ -1246,5 +1352,8 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         info!( "delta_v: {}", self.delta_v );
         info!( "delta_s: {}", self.delta_s );
         info!( "is using importance sampling: {}", if !self.sampling_mixture_prob.is_empty() {"Y"} else {"N"} );
+        info!( "importance_samples: {}", self.importance_samples.len() );
+        info!( "optimization iterations: {}", self.optimization_iterations );
+        info!( "fitness threshold: {}", self.importance_sample_gamma );
     }
 }
