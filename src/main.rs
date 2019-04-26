@@ -232,7 +232,7 @@ fn main() {
              .help("batched iteration for display")
              .takes_value(true))
         .get_matches();
-
+        
     let display_witness_info = matches.is_present("witness");
 
     //select init and goal states
@@ -293,7 +293,7 @@ fn main() {
         },
         _ => { panic!("model not found: {}", model_query) },
     };
-
+        
     let mut planner : Option<Box<Planner<States3D,Control1D,States3D> >> = None;
     // let mut planner : Option<Box<Planner<States4D,Control2D,States3D> >> = None;
     let mut obs_copy : Option<ParamObstacles<States3D>> = None;
@@ -552,7 +552,7 @@ fn main() {
             break;
         }
     }
-
+    
     #[cfg(feature="path_optimize")]
     {
         loop {

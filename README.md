@@ -23,7 +23,7 @@ Inputs to program
   - non-grid based greedy goal-neighbourhood search
   - [TODO] sparse lookup storage
 - Importance Sampling:
-  - [TODO] use of entropy based sampler for shifting towards better parameterization (https://journals.sagepub.com/doi/pdf/10.1177/0278364912444543)
+  - shifting towards better parameterization (https://journals.sagepub.com/doi/pdf/10.1177/0278364912444543)
   
 # Running Planner
 * prerequisites
@@ -104,4 +104,5 @@ Inputs to program
    <img src="images/screenshot1.png" alt="drawing" width="500" height="500"/>
    <img src="images/screenshot2.png" alt="drawing" width="500" height="500"/>
    <img src="images/screenshot3.png" alt="drawing" width="500" height="500"/>
+   <img src="images/is_elite_0.png" alt="drawing" width="500"/>	
 </p>

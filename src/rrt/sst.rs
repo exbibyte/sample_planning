@@ -612,7 +612,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             if cfg!(feature="state_propagate_sample") && prob_use_state_prop_sample > 0.5 
             {
                 
-                let ss_samples = (0..5).map( |_| (self.param.ss_sampler)() ).collect::<Vec<_>>();
+                let ss_samples = (0..10).map( |_| (self.param.ss_sampler)() ).collect::<Vec<_>>();
                 
                 let sample_nearest_pairs = ss_samples.into_iter()
                     .map(|sample|{
@@ -765,9 +765,13 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
     fn propagate( & mut self, state_start: TS, idx_state_best_nearest: usize ) -> ( f32, TC, bool ) {
         
         let config_space_coord_before = (self.param.project_state_to_config)( state_start.clone() );
+
+        let mut rng = rand::thread_rng();
+        let rand_prob = rng.gen_range(0., 1.);
         
-        #[cfg(feature="batch_propagate_sample")]
+        if cfg!(feature="batch_propagate_sample") // && rand_prob > 0.95
         {
+            
             let batch_prop = (0..10).filter_map(|_|{
                 
                 let( monte_carlo_prop_delta,
@@ -788,7 +792,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                 } else {
                     Some( ( monte_carlo_prop_delta, param_sample, is_using_motion_prim, state_propagate_cost ) )
                 }   
-            }).max_by(|a,b| a.3.partial_cmp( & b.3 ).unwrap_or( Ordering::Equal ) );
+            // }).max_by(|a,b| a.3.partial_cmp( & b.3 ).unwrap_or( Ordering::Equal ) );
+            }).max_by(|a,b| a.0.partial_cmp( & b.0 ).unwrap_or( Ordering::Equal ) );
 
             match batch_prop {
                 Some( item ) => {
@@ -801,8 +806,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                 },
             }
         }
-        #[cfg(not(feature="batch_propagate_sample"))]
-        {   
+        else {   
             let( monte_carlo_prop_delta,
                  param_sample,
                  is_using_motion_prim ) = self.select_propagation_params( state_start.clone(),
@@ -1355,5 +1359,37 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         info!( "importance_samples: {}", self.importance_samples.len() );
         info!( "optimization iterations: {}", self.optimization_iterations );
         info!( "fitness threshold: {}", self.importance_sample_gamma );
+
+        if self.idx_reached.is_some() {
+            use std::fs::OpenOptions;
+            let mut file = OpenOptions::new()
+                .read(true)
+                .append(true)
+                .create(true)
+                .open("stat.txt")
+                .expect("file for stat cannot be opened");
+
+            use std::io::Write;
+
+            let num_mo_prims = {#[cfg(feature="motion_primitives")]{
+                self.stat_motion_prim_invoked
+            }
+            #[cfg(not(feature="motion_primitives"))]{
+                0
+            }};
+            
+            writeln!( file, "{}, {}, {}, {}, {}, {}, {}, {}, {}",
+                      self.delta_s,
+                      self.delta_v,
+                      self.nodes.len(),
+                      self.stat_pruned_nodes,
+                      self.witnesses.len(),
+                      self.iter_exec - self.stat_iter_no_change,
+                      self.stat_iter_no_change,
+                      self.stat_iter_collision,
+                      num_mo_prims
+            );
+        }
+        
     }
 }
