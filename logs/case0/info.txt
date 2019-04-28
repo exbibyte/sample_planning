@@ -1,0 +1,64 @@
+obs3,dubins car:
+
+1
+
+baseline + no witness disturbance: (200)
+delta = 0.03
+delta_percent_clamp_low = 0.05
+delta_percent_clamp_high = 1
+delta_s = 0.0001
+delta_v = 0.0002
+
+2
+
+moprim + no witness disturbance: (200)
+delta = 0.03
+delta_percent_clamp_low = 0.05
+delta_percent_clamp_high = 1
+delta_s = 0.0001
+delta_v = 0.0002
+
+3
+
+sparse + witness disturbance: (200)
+delta = 0.03
+delta_percent_clamp_low = 0.05
+delta_percent_clamp_high = 1
+delta_s = 0.05
+delta_v = 0.1
+
+4
+
+sparse + no witness disturbance: (100/200), deferred
+delta = 0.03
+delta_percent_clamp_low = 0.05
+delta_percent_clamp_high = 1
+delta_s = 0.05
+delta_v = 0.1
+
+5
+
+sparse + no witness disturbance: (200)
+delta = 0.06
+delta_percent_clamp_low = 0.05
+delta_percent_clamp_high = 1
+delta_s = 0.07
+delta_v = 0.12
+
+6
+
+sparse + witness disturbance: (200)
+delta = 0.06
+delta_percent_clamp_low = 0.05
+delta_percent_clamp_high = 1
+delta_s = 0.07
+delta_v = 0.12
+
+7
+
+sparse + witness disturbance + moprim: (200)
+delta = 0.06
+delta_percent_clamp_low = 0.05
+delta_percent_clamp_high = 1
+delta_s = 0.07
+delta_v = 0.12

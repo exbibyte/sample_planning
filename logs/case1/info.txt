@@ -1,0 +1,28 @@
+empty 2d domain,dubins car:
+
+measure number of witness neighbourhood expanded after some iterations with the folling parameters:
+
+delta = 0.03
+delta_percent_clamp_low = 0.1
+delta_percent_clamp_high = 1
+delta_s = 0.02
+delta_v = 0.04
+iterations = 4000
+
+scenario: obs_sparse, isound1
+
+1
+
+baseline + no witness disturbance: (200) done
+
+2
+
+no witness disturbance + frontier node sel: (200) done
+
+3
+
+no witness disturbance + control sel: (200) done
+
+4
+
+no witness disturbance + frontier node sel + control sel: (200) done

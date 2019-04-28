@@ -24,16 +24,36 @@ pub fn load_3d_3d() -> HashMap< & 'static str, (States3D, States3D, ParamTree, O
     hm.insert("obs3", ( States3D([0.2, 0.1, 0.]),
                         States3D([0.8, 0.8, 0.]),
                         ParamTree {
+                            // delta_s: 0.07,
+                            // delta_v: 0.12,
                             // delta_s: 0.05,
                             // delta_v: 0.1,
-                            delta_s: 0.0001,
-                            delta_v: 0.0002,
-                            prop_delta_low: 0.05,
+                            // delta_s: 0.0001,
+                            // delta_v: 0.0002,
+                            delta_s: 0.003,
+                            delta_v: 0.006,
+                            // prop_delta_low: 0.05,
+                            // prop_delta_high: 1.,
+                            prop_delta_low: 0.1,
                             prop_delta_high: 1.,   
                         },
-                        Some(0.03),
+                        // Some(0.06),
+                        Some(0.015),
                         Some(250_000),
                         Some(MapPath::Obs(&"obstacles/obs3.txt")),
+    ) );
+
+    hm.insert("obs_sparse", ( States3D([0.2, 0.1, 0.]),
+                              States3D([0.8, 0.8, 0.]),
+                              ParamTree {
+                                  delta_s: 0.02,
+                                  delta_v: 0.04,
+                                  prop_delta_low: 0.1,
+                                  prop_delta_high: 1.,   
+                              },
+                              Some(0.03),
+                              Some(250_000),
+                              Some(MapPath::Obs(&"obstacles/obs_sparse.txt")),
     ) );
 
     //dragon age files

@@ -191,12 +191,6 @@ pub fn stop_cond( mut system_states: States3D, mut states_config: States3D, mut 
     states_goal.0[2] = 0.;
     
     statespace_distance( system_states, states_goal ) < 0.01
-
-    // false
-
-    // system_states.0.iter()
-    //     .zip( states_goal.0.iter() ).take(2)
-    //     .all( |x| ((x.0)-(x.1)).abs() < 0.01 )
 }
 
 ///estimate of closeness to goal condition in configuration space

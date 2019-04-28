@@ -606,10 +606,10 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         }
         #[cfg(not(feature="nn_naive"))]
         {
-            // let mut rng = rand::thread_rng();
-            // let prob_use_state_prop_sample = rng.gen_range(0., 1.);            
-            // if cfg!(feature="state_propagate_sample") && prob_use_state_prop_sample > 0.5
-            if cfg!(feature="state_propagate_sample")
+            let mut rng = rand::thread_rng();
+            let prob_use_state_prop_sample = rng.gen_range(0., 1.);
+            
+            if cfg!(feature="state_propagate_sample") && prob_use_state_prop_sample > 0.5 
             {
                 
                 let ss_samples = (0..10).map( |_| (self.param.ss_sampler)() ).collect::<Vec<_>>();
@@ -766,8 +766,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         
         let config_space_coord_before = (self.param.project_state_to_config)( state_start.clone() );
 
-        // let mut rng = rand::thread_rng();
-        // let rand_prob = rng.gen_range(0., 1.);
+        let mut rng = rand::thread_rng();
+        let rand_prob = rng.gen_range(0., 1.);
         
         if cfg!(feature="batch_propagate_sample") // && rand_prob > 0.95
         {
@@ -1250,13 +1250,6 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                             //add propagated state to nn_query
                             self.add_propagated_state_to_nn_query( state_propagate.clone(), idx_inserted );
                         }
-
-                        #[cfg(feature="motion_primitives")]
-                        {
-                            if is_using_motion_prim {
-                                self.stat_motion_prim_invoked += 1;
-                            }
-                        }
                         
                         //no node is made inactive, hence no pruning necessary
                         Some(idx_inserted)
@@ -1367,9 +1360,7 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         info!( "optimization iterations: {}", self.optimization_iterations );
         info!( "fitness threshold: {}", self.importance_sample_gamma );
 
-        let temp = true;
-
-        if self.idx_reached.is_some() || temp {
+        if self.idx_reached.is_some() {
             use std::fs::OpenOptions;
             let mut file = OpenOptions::new()
                 .read(true)
@@ -1387,13 +1378,12 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                 0
             }};
             
-            writeln!( file, "{}, {}, {}, {}, {}, {}, {}, {}, {}, {}",
+            writeln!( file, "{}, {}, {}, {}, {}, {}, {}, {}, {}",
                       self.delta_s,
                       self.delta_v,
                       self.nodes.len(),
                       self.stat_pruned_nodes,
                       self.witnesses.len(),
-                      self.iter_exec,
                       self.iter_exec - self.stat_iter_no_change,
                       self.stat_iter_no_change,
                       self.stat_iter_collision,
@@ -1403,3 +1393,4 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
         
     }
 }
+OB
