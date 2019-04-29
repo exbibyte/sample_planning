@@ -41,8 +41,13 @@ fn generate_obstacles( num_obs: u32 ) -> Vec<ObsData> {
             let size = rng.gen_range(0.05, 0.075);
             let x = rng.gen_range(0.25, 0.75);
             let y = rng.gen_range(0.25, 0.75);
-            let z = 0.;
-            
+
+            let z = if cfg!(feature="gen_obs_3d"){
+                rng.gen_range(0.25, 0.75)
+            } else {
+                0.
+            };
+
             ObsData([x,y,z,size])
     
         } ).collect::<Vec<_>>()

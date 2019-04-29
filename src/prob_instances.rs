@@ -383,5 +383,18 @@ pub fn load_4d_3d() -> HashMap< & 'static str, (States4D, States4D, ParamTree, O
                         Some(MapPath::Obs(&"obstacles/obs3.txt")),
     ) );
 
+    hm.insert("obs_3d", ( States4D([0.1, 0.1, 0., 0.]),
+                          States4D([0.7, 0.7, 0.7, 0.]),
+                          ParamTree {
+                              delta_s: 0.075,
+                              delta_v: 0.12,
+                              prop_delta_low: 0.05,
+                              prop_delta_high: 1.,   
+                          },
+                          Some(0.12),
+                          Some(250_000),
+                          Some(MapPath::Obs(&"obstacles/obs_3d.txt")),
+    ) );
+
     hm
 }
