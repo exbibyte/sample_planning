@@ -67,7 +67,8 @@ impl <TS> Gaussian<TS> where TS: States {
         self.count_samples = 1; //dummy initialized count
         
         let items = samples.iter().filter_map(|i| {
-            if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist * 2. {
+            // if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist * 2. {
+            if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist * 1. {
                 self.count_samples += 1;
                 Some( i.clone() )
             } else {
@@ -606,10 +607,10 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         }
         #[cfg(not(feature="nn_naive"))]
         {
-            // let mut rng = rand::thread_rng();
-            // let prob_use_state_prop_sample = rng.gen_range(0., 1.);            
-            // if cfg!(feature="state_propagate_sample") && prob_use_state_prop_sample > 0.5
-            if cfg!(feature="state_propagate_sample")
+            let mut rng = rand::thread_rng();
+            let prob_use_state_prop_sample = rng.gen_range(0., 1.);            
+            if cfg!(feature="state_propagate_sample") && prob_use_state_prop_sample > 0.5
+            // if cfg!(feature="state_propagate_sample")
             {
                 
                 let ss_samples = (0..10).map( |_| (self.param.ss_sampler)() ).collect::<Vec<_>>();
@@ -827,6 +828,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         match self.idx_reached {
             Some(x) => {
                 let mut idx = x;
+                fitness_score += self.nodes[idx].cost;
                 loop {
                     count += 1;
                     if count >= lim {
@@ -834,7 +836,7 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                     }
 
                     nodes.push( self.nodes[idx].state.clone() );
-                    fitness_score += self.nodes[idx].cost;
+                    // fitness_score += self.nodes[idx].cost;
                         
                     idx = match self.link_parent.get( &idx ) {
                         Some(parent) => {
@@ -873,6 +875,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
 
         } else if self.importance_samples.len() >= num_samples {
 
+            //importance sampling algorithm
+            
             self.optimization_iterations += 1;
                 
             let gamma_old = self.importance_sample_gamma;
@@ -936,10 +940,11 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
             }
 
             info!("fitness gamma old: {}, new: {}", gamma_old, self.importance_sample_gamma );
-            
+
+            let eps_stop = 0.001;
             if self.importance_sample_gamma != std::f32::INFINITY &&
-               (self.importance_sample_gamma - gamma_old).abs() < 0.001 {
-                info!("no quality improvement");
+               (self.importance_sample_gamma - gamma_old).abs() < eps_stop {
+                info!("no quality improvement"); //can stop, but run indefinitely for now
             }
             
             self.importance_samples.clear();
@@ -997,7 +1002,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         
         let distr = self.sampling_mixture.get(found_idx).expect("mixture not retrieved");
         let mu = distr.mu.get_vals();
-        let d = distr.vicinity_dist * 2.;
+        // let d = distr.vicinity_dist * 2.;
+        let d = distr.vicinity_dist * 1.;
 
         use rand::distributions::{Normal,Distribution};
 
@@ -1399,6 +1405,17 @@ impl <TS,TC,TObs> RRT < TS,TC,TObs > for SST<TS,TC,TObs> where TS: States, TC: C
                       self.stat_iter_collision,
                       num_mo_prims
             );
+
+
+            let mut file_opt = OpenOptions::new()
+                .read(true)
+                .append(true)
+                .create(true)
+                .open("optimize_log.txt")
+                .expect("file for optimize_log cannot be opened");
+            
+            writeln!(file_opt,"{}", self.importance_sample_gamma );
+            
         }
         
     }

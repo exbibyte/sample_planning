@@ -1,0 +1,20 @@
+s:0.075
+v:0.12
+delta: 0.12
+delta_clamp: [0.05,1.]
+
+no witness disturbance
+frontier node selection active
+
+quality threshold scores:
+
+1: 2.9550786
+2: 2.5031433
+4: 2.359734
+6: 1.3488877
+8: 1.1966971
+12: 1.053702
+16: 0.95340395
+
+start: pos = [0.2,0.2,0.], theta: 0
+goal: pos = [0.8,0.8,0.4] +- [0.075,0.075,0.075], theta: _

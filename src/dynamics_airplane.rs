@@ -90,7 +90,8 @@ fn ss_mul( a: States4D, b: f32 ) -> States4D {
 fn dyn_change( states: States4D, control: Control2D, delta: f32 )-> States4D {
     
     use std::f32::consts::PI;
-    
+
+    //control = [u,v]
     let x_dot = states.0[3].cos();
     let y_dot = states.0[3].sin();
     let theta_dot = control.0[0];
@@ -194,37 +195,62 @@ pub fn sampler_state_space() -> States4D {
 
 ///aritrary goal condition
 pub fn stop_cond( system_states: States4D, states_config: States3D, states_goal: States4D )-> bool {
-    system_states.0.iter()
-        .zip( states_goal.0.iter() ).take(3)
-        .all( |x| ((x.0)-(x.1)).abs() < 0.01 )
+
+    let pairs = system_states.0.iter()
+        .zip( states_goal.0.iter() );
+
+    let pairs_copy = pairs.clone();
+    
+    let pos_good = pairs.take(3).all( |x| ((x.0)-(x.1)).abs() < 0.075 );
+    
+    // if pos_good {
+        
+    //     pairs_copy.skip(3).take(1).all( |(a,b)| {
+            
+    //         let aa = ((a + 2.*PI) % (2.*PI));
+    //         let bb = ((b + 2.*PI) % (2.*PI));
+    //         let diff = (aa - bb).abs();
+    //         let diff2 = (diff - 2.*PI).abs();
+    //         let angle_diff = if diff < diff2 {
+    //             diff 
+    //         } else {
+    //             diff2
+    //         };
+            
+    //         let angle_diff_fraction = angle_diff / (2.*PI);
+            
+    //         angle_diff_fraction < 0.15
+    //     })
+            
+    // } else {
+    //     false
+    // }
+
+    pos_good
 }
 
 ///estimate of closeness to goal condition in configuration space
 pub fn config_space_distance( states_config: States3D, states_config_goal: States3D )-> f32 {
     //in this case, just use ss distance metric
-    
+
     use std::f32::consts::PI;
     
     let va = states_config.get_vals();
     let vb = states_config_goal.get_vals();
 
-    let mut ret = 0.;
+    let mut ret : f32 = 0.;
 
     //todo: check reference on suitable metric for rigid body orientation
     
     for i in 0..3{
         ret += (va[i] - vb[i])*(va[i] - vb[i]);
     }
-
-    ret = ret.sqrt();
     
-    // let angle = (va[2] - vb[2]);
-    
-    // let angle_1 = ((va[2] + 2.*PI)%(2.*PI))/(2.*PI);
-    // let angle_2 = ((vb[2] + 2.*PI)%(2.*PI))/(2.*PI);
-    // ret += ((angle_1-angle_2)*(angle_1-angle_2)).sqrt();
+    // let angle_1 = ((va[3] + 2.*PI)%(2.*PI))/(2.*PI);
+    // let angle_2 = ((vb[3] + 2.*PI)%(2.*PI))/(2.*PI);
+    // ret += (angle_1-angle_2)*(angle_1-angle_2);
 
-    ret
+    ret.sqrt()
 }
 
 pub fn statespace_distance( a: States4D, b: States4D ) -> f32 {
@@ -234,21 +260,19 @@ pub fn statespace_distance( a: States4D, b: States4D ) -> f32 {
     let va = a.get_vals();
     let vb = b.get_vals();
 
-    let mut ret = 0.;
+    let mut ret : f32 = 0.;
 
     //todo: check reference on suitable metric for rigid body orientation
     
     for i in 0..3{
         ret += (va[i] - vb[i])*(va[i] - vb[i]);
     }
-
-    ret = ret.sqrt();
     
     let angle_1 = ((va[3] + 2.*PI)%(2.*PI))/(2.*PI);
     let angle_2 = ((vb[3] + 2.*PI)%(2.*PI))/(2.*PI);
-    ret += 0.15 * ((angle_1-angle_2)*(angle_1-angle_2)).sqrt();
+    ret += (angle_1-angle_2)*(angle_1-angle_2);
 
-    ret
+    ret.sqrt()
 }
 
 /// map ``q_end`` to coordinate frame of canonical motion primitive lookup space,

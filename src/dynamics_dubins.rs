@@ -75,8 +75,6 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and 
         motion_primitive_xform: Some(motion_primitive_xform),
         motion_primitive_xform_inv: Some(motion_primitive_xform_inv),
 
-        // ss_goal_gen: statespace_goal_generator,
-
         ss_add: ss_add,
         ss_mul: ss_mul,
     }
@@ -161,15 +159,12 @@ pub fn project_state_space_to_config_space( states: States3D ) -> States3D {
 pub fn sampler_parameter_space( delta: f32 ) -> Control1D {
     
     use std::f32::consts::PI;
-    
-    // let mut rng = rand::thread_rng();
 
     use rand::prelude::*;
     use rand::distributions::Standard;
 
     let val: f32 = SmallRng::from_entropy().sample(Standard);
     
-    // Control1D( [ (rng.gen_range(-1., 1.)*20./180.* PI )/delta ] )
     Control1D( [ ( 2. * (val-0.5) * 40./180.* PI )/delta ] )
 }
 
@@ -218,13 +213,6 @@ pub fn config_space_distance( states_config: States3D, states_config_goal: State
 
     //ret
     ret.sqrt()
-}
-
-///generate a possible state space valuation that satisfies the goal
-pub fn statespace_goal_generator( config_state_goal: States3D ) -> States3D {
-    //in this just case, just use the same value as 2D configuration goal with rotation set to 0
-    let v = config_state_goal.get_vals();
-    States3D( [v[0], v[1], 0.] )
 }
 
 pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {

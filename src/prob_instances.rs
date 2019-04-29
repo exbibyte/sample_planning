@@ -219,14 +219,14 @@ pub fn load_3d_3d() -> HashMap< & 'static str, (States3D, States3D, ParamTree, O
     hm.insert("orz000d", ( States3D([0.25, 0.9, 0.]),
                            States3D([0.25, 0.1, 0.]),
                            ParamTree {
-                               // delta_s: 0.003,
-                               // delta_v: 0.006,
-                               delta_s: 0.01,
-                               delta_v: 0.02,                               
-                               prop_delta_low: 0.02,
+                               delta_s: 0.004,
+                               delta_v: 0.008,
+                               // delta_s: 0.001,
+                               // delta_v: 0.002,                               
+                               prop_delta_low: 0.025,
                                prop_delta_high: 1.,   
                            },
-                           Some(0.075),
+                           Some(0.07),
                            Some(500_000),
                            Some(MapPath::Game((&"maps_custom/dragon_age/poly/orz000d.1.node",
                                                &"maps_custom/dragon_age/poly/orz000d.1.ele" ) ) ),
@@ -370,15 +370,15 @@ pub fn load_4d_3d() -> HashMap< & 'static str, (States4D, States4D, ParamTree, O
     
     let mut hm = HashMap::new();
     
-    hm.insert("obs3", ( States4D([0.2, 0.1, 0., 0.]),
-                        States4D([0.8, 0.8, 0.35, 0.]),
+    hm.insert("obs3", ( States4D([0.2, 0.2, 0., 0.]),
+                        States4D([0.8, 0.8, 0.4, 0.]),
                         ParamTree {
-                            delta_s: 0.1,
-                            delta_v: 0.15,
+                            delta_s: 0.075,
+                            delta_v: 0.12,
                             prop_delta_low: 0.05,
                             prop_delta_high: 1.,   
                         },
-                        Some(0.1),
+                        Some(0.12),
                         Some(250_000),
                         Some(MapPath::Obs(&"obstacles/obs3.txt")),
     ) );

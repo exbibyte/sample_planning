@@ -1,0 +1,15 @@
+s:0.004
+v:0.008
+delta: 0.07
+delta_clamp: [0.025,1.]
+
+no witness disturbance
+
+quality threshold scores:
+
+1: 1.008956
+2: 0.9829887
+4: 0.96761334
+8: 0.9411696
+12: 0.9142173
+16: 0.8817812
