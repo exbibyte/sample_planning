@@ -279,6 +279,8 @@ pub fn statespace_distance( a: States4D, b: States4D ) -> f32 {
 /// where ``q_start`` of the original space is transformed to the origin of the canonical motion primitive lookup space.
 pub fn motion_primitive_xform( q_start: States4D, q_end: States4D ) -> States4D {
 
+    //todo
+    
     States4D( [0., 0., 0., 0.] )
         
     // //translate by -x, -y of q_start
@@ -341,6 +343,8 @@ pub fn motion_primitive_xform( q_start: States4D, q_end: States4D ) -> States4D 
 /// where ``q_start`` of the original space is transformed to the origin of the canonical motion primitive lookup space.
 pub fn motion_primitive_xform_inv( q_start: States4D, qq_end: States4D ) -> States4D {
 
+    //todo
+    
     // use mat::*;
 
     // //rotate by angle of q_start

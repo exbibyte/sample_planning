@@ -236,9 +236,17 @@ fn main() {
     let display_witness_info = matches.is_present("witness");
 
     //select init and goal states
-    
-    // let prob_inst = prob_instances::load_3d_3d();
-    let prob_inst = prob_instances::load_4d_3d();
+
+    let prob_inst = {
+        #[cfg(feature="airplane")]
+        {
+            prob_instances::load_4d_3d()
+        }
+        #[cfg(not(feature="airplane"))]
+        {
+            prob_instances::load_3d_3d()
+        }
+    };
 
     let prob_inst_query = matches.value_of("prob_inst").unwrap();
 
@@ -266,8 +274,17 @@ fn main() {
     let model_query = matches.value_of("model").unwrap();
 
     let models : HashMap<_,_> = vec![
-        // ("dubins", dynamics_dubins::load_model()),
-        ("airplane", dynamics_airplane::load_model())
+        {
+            #[cfg(feature="airplane")]
+            {
+                ("airplane", dynamics_airplane::load_model())
+            }
+            #[cfg(not(feature="airplane"))]
+            {
+                
+                ("dubins", dynamics_dubins::load_model())
+            }
+        }
     ].into_iter().collect();
 
     let model_sel = match models.get( model_query ) {
@@ -293,9 +310,10 @@ fn main() {
         },
         _ => { panic!("model not found: {}", model_query) },
     };
-        
+
+    let mut planner = None;
     // let mut planner : Option<Box<Planner<States3D,Control1D,States3D> >> = None;
-    let mut planner : Option<Box<Planner<States4D,Control2D,States3D> >> = None;
+    // let mut planner : Option<Box<Planner<States4D,Control2D,States3D> >> = None;
     let mut obs_copy : Option<ParamObstacles<States3D>> = None;
 
     let mut map_custom_mesh = None;
@@ -552,7 +570,7 @@ fn main() {
             break;
         }
     }
-    
+
     #[cfg(feature="path_optimize")]
     {
         loop {

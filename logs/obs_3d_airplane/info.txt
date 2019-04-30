@@ -1,0 +1,17 @@
+delta_s: 0.075
+delta_v: 0.12
+prop_delta: 0.12 * [0.05, 1]
+start = [0.1,0.1,0,0,]
+goal = [0.5, 0.5, 0.6, 0] +- [ 0.075, 0.075, 0.075, _ ]
+
+frontier node propagation sample on
+
+optimization iterations, quality:
+
+1: 4.366925
+2: 4.0489664
+3: 3.4321098
+4: 3.2385962
+8: 2.5732057
+12: 2.14029
+

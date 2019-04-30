@@ -41,6 +41,7 @@ state_propagate_sample = []
 batch_propagate_sample = []
 path_optimize = []
 gen_obs_3d = []
+airplane = [] # temporary, use this for Dubins airplane scemario
 
 [[bin]]
 name = "planner"

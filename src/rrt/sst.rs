@@ -68,7 +68,7 @@ impl <TS> Gaussian<TS> where TS: States {
         
         let items = samples.iter().filter_map(|i| {
             // if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist * 2. {
-            if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist * 1. {
+            if f_ss_dist( self.mu.clone(), i.clone() ) < self.vicinity_dist * 2. {
                 self.count_samples += 1;
                 Some( i.clone() )
             } else {
@@ -933,6 +933,13 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
                             //                  self.param.ss_mul );
                             g
                         }).collect();
+
+                        for i in self.sampling_mixture.iter_mut(){
+                            i.update_params( elite_sample_regions.as_slice(),
+                                             self.param.ss_metric,
+                                             self.param.ss_add,
+                                             self.param.ss_mul );
+                        }
                         
                         self.generate_sampling_mixture_prob();
                     }
@@ -1002,8 +1009,8 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         
         let distr = self.sampling_mixture.get(found_idx).expect("mixture not retrieved");
         let mu = distr.mu.get_vals();
-        // let d = distr.vicinity_dist * 2.;
-        let d = distr.vicinity_dist * 1.;
+        let d = distr.vicinity_dist * 2.;
+        // let d = distr.vicinity_dist * 1.;
 
         use rand::distributions::{Normal,Distribution};
 
