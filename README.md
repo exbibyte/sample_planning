@@ -2,7 +2,7 @@
 Sample Based Motion Planning. Work in Progress.
 
 This project is intended as educational replication of several general ideas:
-- Sparcity
+- Sparseness
 - Motion Primitives
 - Importance Sampling
 
@@ -13,7 +13,7 @@ Inputs to program
 - environment obstacles
 
 # Progress:
-- Sparcity:
+- Sparseness
   - implemented core algorithm of Stable Sparse RRT (https://www.cs.rutgers.edu/~kb572/pubs/stable_sparse_rrt_WAFR14_LLB.pdf)
   - approximate nearest neighbour with stochastic search, optional compile flag for linear nearest neighbour search
 - Motion Primitives:
@@ -21,7 +21,6 @@ Inputs to program
   - compile flag for enabling its use;
   - adapted for run-time lookup filling
   - non-grid based greedy goal-neighbourhood search
-  - [TODO] sparse lookup storage
 - Importance Sampling:
   - shifting towards better parameterization (https://journals.sagepub.com/doi/pdf/10.1177/0278364912444543)
   
@@ -33,7 +32,7 @@ Inputs to program
 * build and run in release mode
   * Either:
     * have custom maps already generated (see Generating Custom Maps section)
-    * -p \<problem instance name> (eg: -p obs3 ), see prob_instances.rs for predefined problem domain list
+    * -p \<problem instance name> (eg: -p obs3 ), see prob_instances.rs for predefined problem domain list (recommanded)
   * Or:
     * -o \<file_obstacle>: obstacle file path (eg: -o obstacles/obs2.txt (randomly generated boxes)
   * Or:
@@ -45,7 +44,7 @@ Inputs to program
   * -i \<N>: max iterations
   * -m \<model>: model selection, defaults to dubins (some parameters overriden by src/prob_instances.rs)
       * \<model> variants:
-      	- dubins, airplane (TODO)
+      	- dubins, airplane
   * -b \<N>: batch N iterations in between rendering calls
   * -h: help
 * optional compile-time features:

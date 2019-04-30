@@ -20,6 +20,8 @@ pub enum MapPath {
 pub fn load_3d_3d() -> HashMap< & 'static str, (States3D, States3D, ParamTree, Option<f32>, Option<u32>, Option<MapPath> )> {
     
     let mut hm = HashMap::new();
+
+    //randomly generated boxes
     
     hm.insert("obs3", ( States3D([0.2, 0.1, 0.]),
                         States3D([0.8, 0.8, 0.]),
@@ -369,6 +371,8 @@ pub fn load_3d_3d() -> HashMap< & 'static str, (States3D, States3D, ParamTree, O
 pub fn load_4d_3d() -> HashMap< & 'static str, (States4D, States4D, ParamTree, Option<f32>, Option<u32>, Option<MapPath> )> {
     
     let mut hm = HashMap::new();
+
+    //randomly generated boxes
     
     hm.insert("obs3", ( States4D([0.2, 0.2, 0., 0.]),
                         States4D([0.8, 0.8, 0.4, 0.]),
