@@ -37,11 +37,11 @@ mo_prim_thresh_high = []
 nn_sample_log = []
 nn_naive = []
 disable_witness_disturbance = []
-state_propagate_sample = []
-batch_propagate_sample = []
-path_optimize = []
-gen_obs_3d = []
-airplane = [] # temporary, use this for Dubins airplane scemario
+state_propagate_sample = [] #frontier node selection, 10 samples, 50%
+batch_propagate_sample = [] #control propagation selection, 10 samples, 50%
+path_optimize = [] #use importance sampling for optimization
+gen_obs_3d = [] #use for random box obstacle generation
+airplane = [] # temporary, use this for Dubins airplane model
 
 [[bin]]
 name = "planner"

@@ -767,10 +767,10 @@ impl <TS,TC,TObs> SST<TS,TC,TObs> where TS: States, TC: Control, TObs: States {
         
         let config_space_coord_before = (self.param.project_state_to_config)( state_start.clone() );
 
-        // let mut rng = rand::thread_rng();
-        // let rand_prob = rng.gen_range(0., 1.);
+        let mut rng = rand::thread_rng();
+        let rand_prob = rng.gen_range(0., 1.);
         
-        if cfg!(feature="batch_propagate_sample") // && rand_prob > 0.95
+        if cfg!(feature="batch_propagate_sample") && rand_prob > 0.5
         {
             
             let batch_prop = (0..10).filter_map(|_|{
