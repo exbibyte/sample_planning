@@ -22,3 +22,6 @@ Cargo.lock
 **/poly/*.poly
 **/poly/*.ele
 **/poly/*.node
+
+stat.txt
+optimize_log.txt
