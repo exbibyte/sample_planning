@@ -1,13 +1,13 @@
 [package]
 name = "sample_planning"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Yuan Liu <yuan6liu@gmail.com>"]
 edition = "2018"
 description = "Sample Based Planner"
 repository = "https://github.com/clearlycloudy/sample_planning/"
 keywords = [ "planning", "sample", "rrt", "sst" ]
 license = "MIT"
-documentation = "https://docs.rs/crate/sample_planning/0.0.2/source/src"
+documentation = "https://docs.rs/crate/sample_planning/0.0.3/source/src"
 readme = "README.md"
 
 [dependencies]
@@ -29,19 +29,19 @@ rayon = "1.0.3"
 
 [features]
 motion_primitives = []
-runge_kutta = []
+runge_kutta = [] #defaults to Euler stepping for propagation
 disable_pruning = []
 mo_prim_debug = []
 mo_prim_thresh_low = []
 mo_prim_thresh_high = []
-nn_sample_log = []
-nn_naive = []
-disable_witness_disturbance = []
+nn_sample_log = [] #use proportional to log(# nodes) for nearest neighbour query, defaults to sqrt(# nodes)
+nn_naive = [] #use linear nearest neighbour query
+disable_witness_disturbance = [] #default is active for witness discovery rate of < 10% of recent iterations
 state_propagate_sample = [] #frontier node selection, 10 samples, 50%
-batch_propagate_sample = [] #control propagation selection, 10 samples, 50%
+batch_propagate_sample = [] #control propagation selection, 10 samples, 50%, applicable if nn_naive is NOT enabled
 path_optimize = [] #use importance sampling for optimization
 gen_obs_3d = [] #use for random box obstacle generation
-airplane = [] # temporary, use this for Dubins airplane model
+airplane = [] # temporary workaround; use this for Dubins airplane model
 
 [[bin]]
 name = "planner"

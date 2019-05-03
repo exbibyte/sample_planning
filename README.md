@@ -42,22 +42,14 @@ Inputs to program
   * -w: show witness node and witness representative pairs
       * drawn as a line(red) with end points (purple: witness), (blue: witness representative)
   * -i \<N>: max iterations
-  * -m \<model>: model selection, defaults to dubins (some parameters overriden by src/prob_instances.rs)
-      * \<model> variants:
-      	- dubins, airplane
+  * -m \<model>: dynamical model selection (see src/dynamics_* files)
+      * variants: dubins, airplane (defaults to dubins)
   * -b \<N>: batch N iterations in between rendering calls
   * -h: help
 * optional compile-time features:
   * usage:
     * cargo run --release --bin planner --features nn_naive,disable_pruning,(other features...) -- -p <problem_instance_name> (other program arguments)...
-  * variants:
-    * motion_primitives (enables motion_primitive)
-    * runge_kutta (alternative RK4 propagation method, default is Euler)
-    * disable_pruning (make the propagation tree non-sparse)
-    * nn_naive (use linear search for nearest neighbour query)
-    * nn_sample_log (use logarithmic number of stochastic samples for nn query, must not have nn_naive to have effect, defaults to square root number of stochastic samples)
-    * mo_prim_debug (render all candidates for motion primitives)
-    * mo_prim_thresh_low/high (low and high neighbourhood threshold for motion primitive activation)
+  * variants: see [features] section of Cargo.toml for the list
 
 # Generating Random Obstacles (a couple obstacles exists in obstacles/ folder)
 * build and run in release mode with: cargo run --release --bin gen_obs -- -f \<output_file_path>
