@@ -375,7 +375,7 @@ fn test_motion_primitive_xform(){
     dbg!(qq_end);
     assert!( qq_end.0[0] > 0. - eps && qq_end.0[0] < 0. + eps );
     assert!( qq_end.0[1] > -3. - eps && qq_end.0[1] < -3. + eps );
-    assert!( qq_end.0[2] > -0.5*PI - eps && qq_end.0[2] < -0.5*PI + eps );
+    assert!( qq_end.0[2] > 1.5*PI - eps && qq_end.0[2] < 1.5*PI + eps );
 }
 
 #[test]

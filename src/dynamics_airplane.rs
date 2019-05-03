@@ -278,159 +278,131 @@ pub fn statespace_distance( a: States4D, b: States4D ) -> f32 {
 /// map ``q_end`` to coordinate frame of canonical motion primitive lookup space,
 /// where ``q_start`` of the original space is transformed to the origin of the canonical motion primitive lookup space.
 pub fn motion_primitive_xform( q_start: States4D, q_end: States4D ) -> States4D {
-
-    //todo
-    
-    States4D( [0., 0., 0., 0.] )
         
-    // //translate by -x, -y of q_start
+    //translate by -x, -y of q_start
 
-    // //m_translate =[ 1 0 0 -x
-    // //               0 1 0 -y
-    // //               0 0 1 -z
-    // //               0 0 0  1 ]
+    //m_translate =[ 1 0 0 -x
+    //               0 1 0 -y
+    //               0 0 1 -z
+    //               0 0 0  1 ]
 
-    // use mat::*;
+    use mat::*;
+
+    let x_ref = q_end.0[0]-q_start.0[0];
+    let y_ref = q_end.0[1]-q_start.0[1];
+    let z_ref = q_end.0[2]-q_start.0[2];
+
+    //rotate by -angle of q_start for x-y plane:
+    // m_rot =[ cos(angle)  sin(angle)  0   0
+    //          -sin(angle) cos(angle)  0   0
+    //             0           0        1  -angle
+    //             0           0        0   1 ]
     
-    // let mut m_translate : Mat4<f32> = Mat4::default();
+    let mut m_rot : Mat4<f32> = Mat4::default();
 
+    let angle = q_start.0[3];
     
-    // *m_translate.index_mut( 0, 0 ) = 1.;
-    // *m_translate.index_mut( 1, 1 ) = 1.;
-    // *m_translate.index_mut( 2, 2 ) = 1.;
-    // *m_translate.index_mut( 3, 3 ) = 1.;
+    *m_rot.index_mut( 0, 0 ) = angle.cos();
+    *m_rot.index_mut( 1, 1 ) = angle.cos();
 
-    // *m_translate.index_mut( 0, 3 ) = -q_start.0[0];
-    // *m_translate.index_mut( 1, 3 ) = -q_start.0[1];
-    // *m_translate.index_mut( 2, 3 ) = -q_start.0[2];
+    *m_rot.index_mut( 0, 1 ) = angle.sin();
+    *m_rot.index_mut( 1, 0 ) = -angle.sin();
 
-    // //rotate by -angle of q_start
-    // //m_rot =[ cos(angle)  sin(angle)  0   0
-    // //         -sin(angle) cos(angle)  0   0
-    // //             0           0       1   0
-    // //             0           0       0  -angle ]
+    *m_rot.index_mut( 2, 2 ) = 1.;
+    *m_rot.index_mut( 2, 3 ) = -angle;
+    *m_rot.index_mut( 3, 3 ) = 1.;
     
-    // let mut m_rot : Mat4<f32> = Mat4::default();
 
-    // let angle = q_start.0[3];
+    let mut q : Mat4x1<f32> = Mat4x1::default();
+    q[0] = x_ref;
+    q[1] = y_ref;
+    q[2] = q_end.0[3]; //angle of q_end
+    q[3] = 1.;
     
-    // *m_rot.index_mut( 0, 0 ) = angle.cos();
-    // *m_rot.index_mut( 1, 1 ) = angle.cos();
+    let qq = m_rot.mul_mat4x1( & q ).unwrap();
 
-    // *m_rot.index_mut( 0, 1 ) = angle.sin();
-    // *m_rot.index_mut( 1, 0 ) = -angle.sin();
-
-    // *m_rot.index_mut( 2, 2 ) = 1.;
-    // *m_rot.index_mut( 2, 3 ) = 1.;
-    // *m_rot.index_mut( 3, 3 ) = -angle;
-
-    // let mut q : Mat4x1<f32> = Mat4x1::default();
-    // q[0] = q_end.0[0];
-    // q[1] = q_end.0[1];
-    // q[2] = q_end.0[2];
-    // q[3] = q_end.0[3];
+    use std::f32::consts::PI;
     
-    // //rot( translate( q ) )
-    
-    // let qq = m_rot.mul_mat4x1( & m_translate.mul_mat4x1( &q ).unwrap() ).unwrap();
-
-    // use std::f32::consts::PI;
-    
-    // States4D( [ qq[0], qq[1], qq[2], ( qq[3] + 2. * PI ) % ( 2. * PI ) ] )
+    States4D( [ qq[0], qq[1], z_ref, ( qq[2] + 2. * PI ) % ( 2. * PI ) ] )
 }
 
 /// map ``qq_end`` from motion primitive lookup space back to the original space,
 /// where ``q_start`` of the original space is transformed to the origin of the canonical motion primitive lookup space.
 pub fn motion_primitive_xform_inv( q_start: States4D, qq_end: States4D ) -> States4D {
-
-    //todo
     
-    // use mat::*;
+    use mat::*;
 
-    // //rotate by angle of q_start
-    // //m_rot =[ cos(angle)  -sin(angle)  0   0
-    // //         sin(angle)   cos(angle)  0   0
-    // //             0           0        1   0
-    // //             0           0        0   angle    ]
+    //rotate by angle of q_start for x-y plane
+    //m_rot =[ cos(angle)  -sin(angle)  0   0
+    //         sin(angle)   cos(angle)  0   0
+    //             0           0        1   angle
+    //             0           0        0   1    ]
     
-    // let mut m_rot : Mat4<f32> = Mat4::default();
+    let mut m_rot : Mat4<f32> = Mat4::default();
 
-    // let angle = q_start.0[3];
+    let angle = q_start.0[3];
     
-    // *m_rot.index_mut( 0, 0 ) = angle.cos();
-    // *m_rot.index_mut( 1, 1 ) = angle.cos();
+    *m_rot.index_mut( 0, 0 ) = angle.cos();
+    *m_rot.index_mut( 1, 1 ) = angle.cos();
 
-    // *m_rot.index_mut( 0, 1 ) = -angle.sin();
-    // *m_rot.index_mut( 1, 0 ) = angle.sin();
+    *m_rot.index_mut( 0, 1 ) = -angle.sin();
+    *m_rot.index_mut( 1, 0 ) = angle.sin();
 
-    // *m_rot.index_mut( 2, 2 ) = 1.;
-    // *m_rot.index_mut( 2, 3 ) = 1.;
-    // *m_rot.index_mut( 3, 3 ) = angle;
+    *m_rot.index_mut( 2, 2 ) = 1.;
+    *m_rot.index_mut( 2, 3 ) = angle;
+    *m_rot.index_mut( 3, 3 ) = 1.;
 
-    // //translate by x, y, z of q_start
+    let mut q : Mat4x1<f32> = Mat4x1::default();
+    q[0] = qq_end.0[0]; //x
+    q[1] = qq_end.0[1]; //y
+    q[2] = qq_end.0[3]; //angle
+    q[3] = 1.;
     
-    // //m_translate =[ 1 0 0 x
-    // //               0 1 0 y
-    // //               0 0 1 z
-    // //               0 0 0 1 ]
-
-    // let mut m_translate : Mat4<f32> = Mat4::default();
-
-    // *m_translate.index_mut( 0, 0 ) = 1.;
-    // *m_translate.index_mut( 1, 1 ) = 1.;
-    // *m_translate.index_mut( 2, 2 ) = 1.;
-    // *m_translate.index_mut( 3, 3 ) = 1.;
-
-    // *m_translate.index_mut( 0, 3 ) = q_start.0[0];
-    // *m_translate.index_mut( 1, 3 ) = q_start.0[1];
-    // *m_translate.index_mut( 1, 3 ) = q_start.0[2];
+    let temp = m_rot.mul_mat4x1( &q ).unwrap();
     
-    // let mut q : Mat4x1<f32> = Mat4x1::default();
-    // q[0] = qq_end.0[0];
-    // q[1] = qq_end.0[1];
-    // q[2] = qq_end.0[2];
-    // q[3] = 1.;
+    //translate by x, y, z of q_start
 
-    // //translate( rot( q ) )
-    // let q = m_translate.mul_mat4x1( & m_rot.mul_mat4x1( &q ).unwrap() ).unwrap();
+    let x_translate = temp[0] + q_start.0[0];
+    let y_translate = temp[1] + q_start.0[1];
+    let z_translate = qq_end.0[2] + q_start.0[2];
 
-    // use std::f32::consts::PI;
+    use std::f32::consts::PI;
     
-    // States3D( [ q[0], q[1], ( q[2] + 2. * PI ) % ( 2. * PI ) ] )
-
-    States4D( [0., 0., 0., 0.] )
+    States4D( [ x_translate, y_translate, z_translate, ( temp[2] + 2. * PI ) % ( 2. * PI ) ] )
 }
 
-// #[test]
-// fn test_motion_primitive_xform(){
+#[test]
+fn test_motion_primitive_xform(){
     
-//     use std::f32::consts::PI;
+    use std::f32::consts::PI;
     
-//     let q_start: States3D = States3D([4., 5., 0.5*PI]);
-//     let q_end: States3D = States3D([7., 5., 0.*PI]);
+    let q_start: States4D = States4D([4., 5., 2., 0.5*PI]);
+    let q_end: States4D = States4D([7., 5., 3., 0.*PI]);
     
-//     let qq_end = motion_primitive_xform( q_start, q_end );
+    let qq_end = motion_primitive_xform( q_start, q_end );
 
-//     let eps = 1e-6;
-//     dbg!(qq_end);
-//     assert!( qq_end.0[0] > 0. - eps && qq_end.0[0] < 0. + eps );
-//     assert!( qq_end.0[1] > -3. - eps && qq_end.0[1] < -3. + eps );
-//     assert!( qq_end.0[2] > -0.5*PI - eps && qq_end.0[2] < -0.5*PI + eps );
-// }
+    let eps = 1e-6;
+    dbg!(qq_end);
+    assert!( qq_end.0[0] > 0. - eps && qq_end.0[0] < 0. + eps );
+    assert!( qq_end.0[1] > -3. - eps && qq_end.0[1] < -3. + eps );
+    assert!( qq_end.0[2] > 1. - eps && qq_end.0[2] < 1. + eps );
+    assert!( qq_end.0[3] > 1.5*PI - eps && qq_end.0[3] < 1.5*PI + eps );
+}
 
-// #[test]
-// fn test_motion_primitive_xform_inv(){
+#[test]
+fn test_motion_primitive_xform_inv(){
     
-//     use std::f32::consts::PI;
+    use std::f32::consts::PI;
     
-//     let q_start: States3D = States3D([4., 5., 0.5*PI]);
-//     let qq_end: States3D = States3D([0., -3., -0.5*PI]);
+    let q_start: States4D = States4D([4., 5., 2., 0.5*PI]);
+    let qq_end: States4D = States4D([0., -3., 1., -0.5*PI]);
     
-//     let q_end = motion_primitive_xform_inv( q_start, qq_end );
+    let q_end = motion_primitive_xform_inv( q_start, qq_end );
 
-//     let eps = 1e-6;
-//     dbg!(q_end);
-//     assert!( q_end.0[0] > 7. - eps && q_end.0[0] < 7. + eps );
-//     assert!( q_end.0[1] > 5. - eps && q_end.0[1] < 5. + eps );
-//     assert!( q_end.0[2] > 0.*PI - eps && q_end.0[2] < 0.*PI + eps );
-// }
+    let eps = 1e-6;
+    dbg!(q_end);
+    assert!( q_end.0[0] > 7. - eps && q_end.0[0] < 7. + eps );
+    assert!( q_end.0[1] > 5. - eps && q_end.0[1] < 5. + eps );
+    assert!( q_end.0[2] > 3. - eps && q_end.0[2] < 3. + eps );
+    assert!( q_end.0[3] > 0.*PI - eps && q_end.0[3] < 0.*PI + eps );
+}
