@@ -24,7 +24,10 @@ What's in it:
 - Importance Sampling:
   - adaptive sampling (https://journals.sagepub.com/doi/pdf/10.1177/0278364912444543)
   - used for trajectory optimization with a given fitness function
-  
+
+# Writeups, Benchmarks, etc..
+[project](http://github.com/clearlycloudy/sample_planning/blob/master/report.pdf)
+
 # Running Planner
 * prerequisites
   * install Rust: https://rustup.rs/
@@ -104,6 +107,3 @@ What's in it:
    <img src="images/screenshot2.png" alt="drawing" width="400"/>
    <img src="images/screenshot3.png" alt="drawing" width="400"/>
 </p>
-
-# Writeups, Benchmarks, etc..
-[project](http://github.com/clearlycloudy/sample_planning/blob/master/report.pdf)
