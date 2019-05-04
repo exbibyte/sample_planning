@@ -83,17 +83,20 @@ Inputs to program
     * (eg: cargo run --release --bin planner -- -e maps_custom/dragon_age/poly/ost100d.1.ele -n maps_custom/dragon_age/poly/ost100d.1.node -p ost100d -i 500000 -m dubins
 
 # Screenshots
-## Randomly Generated Boxes
+## Simple Environments
 <p align="center">
-   <img src="images/screenshot0.png" alt="drawing" width="500" height="500"/>
+   <img src="images/screenshot0.png" alt="drawing" width="400"/>
+   <img src="images/moprim.png" alt="drawing" width="500"/>	
+   <img src="images/is_elite_0.png" alt="drawing" width="500"/>
+   <img src="images/is_elite_1.png" alt="drawing" width="500"/>
+   <img src="images/is_elite_2.png" alt="drawing" width="500"/>	
 </p>
 
-## Maps from Dragon Age
+## Hard Game Maps
 <p align="center">
-   <img src="images/custom_map0_original.png" alt="drawing" width="500" height="500"/>
-   <img src="images/custom_map1_original.png" alt="drawing" width="500" height="500"/>
-   <img src="images/screenshot1.png" alt="drawing" width="500" height="500"/>
-   <img src="images/screenshot2.png" alt="drawing" width="500" height="500"/>
-   <img src="images/screenshot3.png" alt="drawing" width="500" height="500"/>
-   <img src="images/is_elite_0.png" alt="drawing" width="500"/>	
-</p>
+   <img src="images/custom_map0_original.png" alt="drawing" width="400"/>
+   <img src="images/custom_map1_original.png" alt="drawing" width="400"/>
+   <img src="images/screenshot1.png" alt="drawing" width="400"/>
+   <img src="images/screenshot2.png" alt="drawing" width="400"/>
+   <img src="images/screenshot3.png" alt="drawing" width="400"/>
+</p>   
