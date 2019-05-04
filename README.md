@@ -40,7 +40,9 @@ What's in it:
     * sample obstacle file: obstacles/obs3.txt (randomly generated boxes)
   * Or:
     * have custom maps already generated (see Generating Custom Maps section)
-    * cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path> (other program arguments...)	
+    * cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path> (other program arguments...)
+      * eg: cargo run --release --bin planner -- -e maps_custom/dragon_age/poly/ost100d.1.ele -n maps_custom/dragon_age/poly/ost100d.1.node -p orz000d -i 1000000 -b 300 -m dubins
+    * would need to modify dynamics model file to change goal states, etc.
     * see custom maps section for .ele and .node details
 * optional arguments:
   * -w: show witness node and witness representative pairs
@@ -83,12 +85,6 @@ What's in it:
   * 2nd, run ./script_map2poly.sh (generates formatted file for Triangle, may take a while)
   * 3rd, run ./script_triangulate_poly.sh (outputs 2D triangulation result as .ele and .node files)
   * all set for use...
-  
-# Using Custom Maps
-* build and run planner with custom maps in release mode:
-  * Either (recommended): cargo run --release --bin planner -- -p \<problem_instance_name> (see src/prob_instances.rs)
-  * Or: cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path> -m \<model>(edit appropriate model file for different source/goal states)
-    * (eg: cargo run --release --bin planner -- -e maps_custom/dragon_age/poly/ost100d.1.ele -n maps_custom/dragon_age/poly/ost100d.1.node -p ost100d -i 500000 -m dubins
 
 # Screenshots
 ## Simple Environments
