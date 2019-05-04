@@ -106,4 +106,4 @@ What's in it:
 </p>
 
 # Writeups, Benchmarks, etc..
-[project](http://github.com/clearlycloudy/sample_planning/report.pdf)
+[project](http://github.com/clearlycloudy/sample_planning/blob/master/report.pdf)
