@@ -12,17 +12,18 @@ Inputs to program
 - system dynamics and various constraints are supplied as functions
 - environment obstacles
 
-# Progress:
+What's in it:
 - Sparseness
-  - implemented core algorithm of Stable Sparse RRT (https://www.cs.rutgers.edu/~kb572/pubs/stable_sparse_rrt_WAFR14_LLB.pdf)
-  - approximate nearest neighbour with stochastic search, optional compile flag for linear nearest neighbour search
+  - Stable Sparse RRT (https://www.cs.rutgers.edu/~kb572/pubs/stable_sparse_rrt_WAFR14_LLB.pdf)
+  - approximate nearest neighbour with stochastic search
 - Motion Primitives:
   - lookup for feasible control for steering toward a direction (https://arxiv.org/pdf/1809.02399.pdf)
-  - compile flag for enabling its use;
+  - compile flag for enabling its use
   - adapted for run-time lookup filling
   - non-grid based greedy goal-neighbourhood search
 - Importance Sampling:
-  - shifting towards better parameterization (https://journals.sagepub.com/doi/pdf/10.1177/0278364912444543)
+  - adaptive sampling (https://journals.sagepub.com/doi/pdf/10.1177/0278364912444543)
+  - used for trajectory optimization with a given fitness function
   
 # Running Planner
 * prerequisites
@@ -32,12 +33,15 @@ Inputs to program
 * build and run in release mode
   * Either:
     * have custom maps already generated (see Generating Custom Maps section)
-    * -p \<problem instance name> (eg: -p obs3 ), see prob_instances.rs for predefined problem domain list (recommanded)
+    * cargo run --release --bin planner -- -p \<problem_instance_name> (other program arguments...)
+    * see prob_instances.rs for predefined problem domain list
   * Or:
-    * -o \<file_obstacle>: obstacle file path (eg: -o obstacles/obs2.txt (randomly generated boxes)
+    * cargo run --release --bin planner -- -o \<file_obstacle> (other program arguments...)
+    * sample obstacle file: obstacles/obs3.txt (randomly generated boxes)
   * Or:
     * have custom maps already generated (see Generating Custom Maps section)
-    * -e \<.ele file path> -n \<.node file path> (see custom maps section) -m \<model>
+    * cargo run --release --bin planner -- -e \<.ele file path> -n \<.node file path> (other program arguments...)	
+    * see custom maps section for .ele and .node details
 * optional arguments:
   * -w: show witness node and witness representative pairs
       * drawn as a line(red) with end points (purple: witness), (blue: witness representative)
@@ -48,8 +52,10 @@ Inputs to program
   * -h: help
 * optional compile-time features:
   * usage:
-    * cargo run --release --bin planner --features nn_naive,disable_pruning,(other features...) -- -p <problem_instance_name> (other program arguments)...
+    * cargo run --release --bin planner --features nn_naive,disable_pruning,(other features...) -- -p \<problem_instance_name> (other program arguments...)
   * variants: see [features] section of Cargo.toml for the list
+* sample program:
+  * cargo run --release --bin planner --feature nn_sample_log -- -p obs3 -m dubins -i 1000000 -b 200
 
 # Generating Random Obstacles (a couple obstacles exists in obstacles/ folder)
 * build and run in release mode with: cargo run --release --bin gen_obs -- -f \<output_file_path>
@@ -57,6 +63,8 @@ Inputs to program
   * -f \<output_file_path> (eg: cargo run --release --bin gen_obs -- -f obstacles/obs99.txt)
 * optional arguments:
   * -n \<N>: number of obstacles to be generated (default: 30)
+* optional features:
+  * gen_obs_3d: generate boxes for in 3D domain (defaults to planar domain)
   
 # Using Random Obstacles
 * cargo run --release --bin planner -- -o <file_obstacle>
