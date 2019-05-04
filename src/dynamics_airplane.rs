@@ -6,8 +6,9 @@
 //! y' = Vsin(theta)
 //! z' = v
 //! theta' = u
-//! |v| <= constant
-//! |u| <= constant
+//! u range: [-40,40] degrees
+//! z range: [-0.5,0.5]
+//! V = 1
 
 use crate::states::*;
 use crate::control::*;
@@ -20,7 +21,7 @@ use mazth::mat;
 use std::f32::consts::PI;
 
 ///load model info to the caller
-pub fn load_model() -> Param<States4D, Control2D, States3D> { //state space and configuration space both are 3 dimensional in this case
+pub fn load_model() -> Param<States4D, Control2D, States3D> { //state space 4D, control space 2D, config space 3D
     Param {
         states_init: States4D([0.5, 0.1, 0., 0.]), //default, override by prob_instances.rs file
         states_goal: States4D([0.8, 0.1, 0.5, 0.]), //default, override by prob_instances.rs file
@@ -34,8 +35,10 @@ pub fn load_model() -> Param<States4D, Control2D, States3D> { //state space and 
         sim_delta: 0.05f32, //default, optinal override by prob_instances.rs file
         iterations_bound: 300_000, //override via commandline and prob_instances.rs file
 
-        //motion primitive transform functions
+        ///motion primitive transform functions
         motion_primitive_xform: Some(motion_primitive_xform),
+
+        ///not actually used
         motion_primitive_xform_inv: Some(motion_primitive_xform_inv),
 
         ss_add: ss_add,
@@ -201,58 +204,29 @@ pub fn stop_cond( system_states: States4D, states_config: States3D, states_goal:
 
     let pairs_copy = pairs.clone();
     
-    let pos_good = pairs.take(3).all( |x| ((x.0)-(x.1)).abs() < 0.075 );
-    
-    // if pos_good {
-        
-    //     pairs_copy.skip(3).take(1).all( |(a,b)| {
-            
-    //         let aa = ((a + 2.*PI) % (2.*PI));
-    //         let bb = ((b + 2.*PI) % (2.*PI));
-    //         let diff = (aa - bb).abs();
-    //         let diff2 = (diff - 2.*PI).abs();
-    //         let angle_diff = if diff < diff2 {
-    //             diff 
-    //         } else {
-    //             diff2
-    //         };
-            
-    //         let angle_diff_fraction = angle_diff / (2.*PI);
-            
-    //         angle_diff_fraction < 0.15
-    //     })
-            
-    // } else {
-    //     false
-    // }
+    let pos_good = pairs.take(3).all( |x| ((x.0)-(x.1)).abs() < 0.04 );
 
     pos_good
 }
 
 ///estimate of closeness to goal condition in configuration space
 pub fn config_space_distance( states_config: States3D, states_config_goal: States3D )-> f32 {
-    //in this case, just use ss distance metric
 
     use std::f32::consts::PI;
     
     let va = states_config.get_vals();
     let vb = states_config_goal.get_vals();
 
-    let mut ret : f32 = 0.;
-
-    //todo: check reference on suitable metric for rigid body orientation
+    debug_assert!( va.len() >= 3 );
+    debug_assert!( vb.len() >= 3 );
     
-    for i in 0..3{
-        ret += (va[i] - vb[i])*(va[i] - vb[i]);
-    }
-    
-    // let angle_1 = ((va[3] + 2.*PI)%(2.*PI))/(2.*PI);
-    // let angle_2 = ((vb[3] + 2.*PI)%(2.*PI))/(2.*PI);
-    // ret += (angle_1-angle_2)*(angle_1-angle_2);
-
-    ret.sqrt()
+    va.iter().zip( vb.iter() )
+        .take(3)
+        .fold( 0., |acc, (a,b)| acc + (a-b)*(a-b) )
+        .sqrt()
 }
 
+/// uses a linear combination of positional and rotational differences
 pub fn statespace_distance( a: States4D, b: States4D ) -> f32 {
 
     use std::f32::consts::PI;
@@ -260,10 +234,12 @@ pub fn statespace_distance( a: States4D, b: States4D ) -> f32 {
     let va = a.get_vals();
     let vb = b.get_vals();
 
+    debug_assert!( va.len() >= 3 );
+    debug_assert!( vb.len() >= 3 );
+    
     let mut ret : f32 = 0.;
 
-    //todo: check reference on suitable metric for rigid body orientation
-    
+    //assumes environment position coordinates are normalized to be within [0,1] for each dimension
     for i in 0..3{
         ret += (va[i] - vb[i])*(va[i] - vb[i]);
     }

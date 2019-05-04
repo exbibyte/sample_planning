@@ -5,6 +5,8 @@
 //! x' = Vcos(theta)
 //! y' = Vsin(theta)
 //! theta' = u
+//! u range: [-40,40] degrees
+//! V = 1
 
 use crate::states::*;
 use crate::control::*;
@@ -71,8 +73,10 @@ pub fn load_model() -> Param<States3D, Control1D, States3D> { //state space and 
         sim_delta: 0.05f32, //default, optinal override by prob_instances.rs file
         iterations_bound: 300_000, //override via commandline and prob_instances.rs file
 
-        //motion primitive transform functions
+        ///motion primitive transform functions
         motion_primitive_xform: Some(motion_primitive_xform),
+
+        ///not actually used
         motion_primitive_xform_inv: Some(motion_primitive_xform_inv),
 
         ss_add: ss_add,
@@ -190,31 +194,22 @@ pub fn stop_cond( mut system_states: States3D, mut states_config: States3D, mut 
 
 ///estimate of closeness to goal condition in configuration space
 pub fn config_space_distance( states_config: States3D, states_config_goal: States3D )-> f32 {
-    //in this case, just use ss distance metric
     
     use std::f32::consts::PI;
     
     let va = states_config.get_vals();
     let vb = states_config_goal.get_vals();
 
-    let mut ret = 0.;
-
-    //todo: check reference on suitable metric for rigid body orientation
+    debug_assert!( va.len() >= 3 );
+    debug_assert!( vb.len() >= 3 );
     
-    for i in 0..2{
-        ret += (va[i] - vb[i])*(va[i] - vb[i]);
-    }
-    
-    let angle = (va[2] - vb[2]);
-    
-    let angle_1 = ((va[2] + 2.*PI)%(2.*PI))/(2.*PI);
-    let angle_2 = ((vb[2] + 2.*PI)%(2.*PI))/(2.*PI);
-    ret += ((angle_1-angle_2)*(angle_1-angle_2));
-
-    //ret
-    ret.sqrt()
+    va.iter().zip( vb.iter() )
+        .take(3)
+        .fold( 0., |acc, (a,b)| acc + (a-b)*(a-b) )
+        .sqrt()
 }
 
+/// uses a linear combination of positional and rotational differences
 pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {
 
     use std::f32::consts::PI;
@@ -222,19 +217,15 @@ pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {
     let va = a.get_vals();
     let vb = b.get_vals();
 
+    debug_assert!( va.len() >= 3 );
+    debug_assert!( vb.len() >= 3 );
+    
     let mut ret = 0.;
 
-    //todo: check reference on suitable metric for rigid body orientation
-    
+    //assumes environment position coordinates are normalized to be within [0,1] for each dimension
     for i in 0..2{
         ret += (va[i] - vb[i])*(va[i] - vb[i]);
     }
-    
-    // let angle = (va[2] - vb[2]);
-    
-    // let angle_1 = (va[2] + 2.*PI)%(2.*PI);
-    // let angle_2 = (vb[2] + 2.*PI)%(2.*PI);
-    // ret += (angle_1-angle_2)*(angle_1-angle_2);
 
     let angle_1 = ((va[2] + 2.*PI)%(2.*PI))/(2.*PI);
     let angle_2 = ((vb[2] + 2.*PI)%(2.*PI))/(2.*PI);
@@ -242,7 +233,6 @@ pub fn statespace_distance( a: States3D, b: States3D ) -> f32 {
     ret += ((angle_1-angle_2)*(angle_1-angle_2));
 
     ret.sqrt()
-    // ret
 }
 
 /// map ``q_end`` to coordinate frame of canonical motion primitive lookup space,
