@@ -103,4 +103,7 @@ What's in it:
    <img src="images/screenshot1.png" alt="drawing" width="400"/>
    <img src="images/screenshot2.png" alt="drawing" width="400"/>
    <img src="images/screenshot3.png" alt="drawing" width="400"/>
-</p>   
+</p>
+
+#Writeups, Benchmarks, etc..
+[project](http://github.com/clearlycloudy/sample_planning/report.pdf)
