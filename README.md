@@ -105,5 +105,5 @@ What's in it:
    <img src="images/screenshot3.png" alt="drawing" width="400"/>
 </p>
 
-#Writeups, Benchmarks, etc..
+# Writeups, Benchmarks, etc..
 [project](http://github.com/clearlycloudy/sample_planning/report.pdf)
