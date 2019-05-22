@@ -1,5 +1,5 @@
 # Briefing
-Sample Based Motion Planning. Work in Progress.
+Sample Based Motion Planning.
 
 This project is intended as educational replication of several general ideas:
 - Sparseness
