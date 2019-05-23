@@ -60,7 +60,7 @@ What's in it:
     * cargo run --release --bin planner --features nn_naive,disable_pruning,(other features...) -- -p \<problem_instance_name> (other program arguments...)
   * variants: see [features] section of Cargo.toml for the list
 * sample program:
-  * cargo run --release --bin planner --feature nn_sample_log -- -p obs3 -m dubins -i 1000000 -b 200
+  * cargo run --release --bin planner --features nn_sample_log,state_propagate_sample,path_optimize -- -p obs3 -m dubins -i 1000000 -b 200
 
 # Generating Random Obstacles (a couple obstacles exists in obstacles/ folder)
 * build and run in release mode with: cargo run --release --bin gen_obs -- -f \<output_file_path>
