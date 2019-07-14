@@ -1,13 +1,13 @@
 [package]
 name = "sample_planning"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Yuan Liu <yuan6liu@gmail.com>"]
 edition = "2018"
 description = "Sample Based Planner"
 repository = "https://github.com/clearlycloudy/sample_planning/"
 keywords = [ "planning", "sample", "rrt", "sst" ]
 license = "MIT"
-documentation = "https://docs.rs/crate/sample_planning/0.0.3/source/src"
+documentation = "https://docs.rs/crate/sample_planning/"
 readme = "README.md"
 
 [dependencies]
